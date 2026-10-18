@@ -8,7 +8,7 @@ const SERVER_URL := "https://app-4729a9fe-87fc-4f1b-9248-112725e0db57.cleverapps
 func _ready() -> void:
     get_viewport().size_changed.connect(_layout_splash)
     _layout_splash()
-    status_label.text = I18n.text_for("server_online")
+    status_label.text = I18n.text_for("connecting")
     _start_splash()
 
 func _start_splash() -> void:
@@ -17,7 +17,7 @@ func _start_splash() -> void:
     tween.tween_callback(_check_server)
 
 func _check_server() -> void:
-    status_label.text = I18n.text_for("server_unavailable")
+    status_label.text = I18n.text_for("connecting")
     var request := HTTPRequest.new()
     add_child(request)
     request.request_completed.connect(_on_health_completed.bind(request))
