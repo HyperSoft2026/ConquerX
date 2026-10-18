@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Pool } = require('pg');
+const { WebSocketServer, WebSocket } = require('ws');
 
 const port = Number(process.env.PORT || 3000);
 const poolConfig = process.env.POSTGRESQL_ADDON_URI
@@ -16,6 +17,15 @@ const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
 const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || `${SERVER_URL}/auth/discord/callback`;
 const OAUTH_STATE_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
 const LOGIN_SESSION_TTL_MS = 10 * 60 * 1000;
+
+const WORLD_WIDTH = 4000;
+const WORLD_HEIGHT = 2400;
+const CELL_SIZE = 50;
+const GRID_WIDTH = WORLD_WIDTH / CELL_SIZE;
+const GRID_HEIGHT = WORLD_HEIGHT / CELL_SIZE;
+const TICK_MS = 50;
+const PLAYER_SPEED = 340;
+const MAX_PLAYERS_PER_MATCH = 40;
 
 const publicRoot = path.join(__dirname, 'public');
 const staticRoot = path.join(__dirname, 'assets');
@@ -180,6 +190,171 @@ function getBearerToken(req) {
   return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
 }
 
+const matches = new Map();
+const connections = new Map();
+
+function createMatch() {
+  const match = {
+    id: crypto.randomUUID(),
+    players: new Map(),
+    territory: new Uint32Array(GRID_WIDTH * GRID_HEIGHT),
+    nextPlayerNumber: 1
+  };
+  matches.set(match.id, match);
+  return match;
+}
+
+let match = createMatch();
+
+function spawnForNumber(n) {
+  const margin = 250;
+  const slots = [
+    [margin, margin], [WORLD_WIDTH - margin, margin], [margin, WORLD_HEIGHT - margin], [WORLD_WIDTH - margin, WORLD_HEIGHT - margin],
+    [WORLD_WIDTH / 2, WORLD_HEIGHT / 2]
+  ];
+  return slots[(n - 1) % slots.length].slice();
+}
+
+function paintStartTerritory(matchState, player) {
+  const cx = Math.floor(player.x / CELL_SIZE);
+  const cy = Math.floor(player.y / CELL_SIZE);
+  for (let y = cy - 2; y <= cy + 2; y += 1) {
+    for (let x = cx - 2; x <= cx + 2; x += 1) {
+      if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) matchState.territory[y * GRID_WIDTH + x] = player.id;
+    }
+  }
+}
+
+function paintMovementTerritory(matchState, player) {
+  const radius = 1;
+  const cx = Math.floor(player.x / CELL_SIZE);
+  const cy = Math.floor(player.y / CELL_SIZE);
+  let added = 0;
+  for (let y = cy - radius; y <= cy + radius; y += 1) {
+    for (let x = cx - radius; x <= cx + radius; x += 1) {
+      if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) continue;
+      const index = y * GRID_WIDTH + x;
+      if (matchState.territory[index] !== player.id) {
+        matchState.territory[index] = player.id;
+        added += 1;
+      }
+    }
+  }
+  player.territory += added;
+}
+
+function playerSnapshot(player) {
+  return {
+    id: player.id,
+    username: player.username,
+    x: Math.round(player.x),
+    y: Math.round(player.y),
+    angle: player.angle,
+    territory: player.territory,
+    connected: player.socket.readyState === WebSocket.OPEN
+  };
+}
+
+function matchSnapshot(matchState) {
+  return {
+    type: 'state',
+    world: { width: WORLD_WIDTH, height: WORLD_HEIGHT, cell_size: CELL_SIZE, grid_width: GRID_WIDTH, grid_height: GRID_HEIGHT },
+    self_id: null,
+    players: Array.from(matchState.players.values()).map(playerSnapshot),
+    territory: Array.from(matchState.territory)
+  };
+}
+
+function send(socket, payload) {
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+}
+
+function broadcast(matchState, payload) {
+  for (const player of matchState.players.values()) send(player.socket, payload);
+}
+
+function removePlayer(matchState, player) {
+  if (!player) return;
+  matchState.players.delete(player.id);
+  connections.delete(player.socket);
+  broadcast(matchState, { type: 'player_left', id: player.id });
+}
+
+function handleGameMessage(player, raw) {
+  let message;
+  try { message = JSON.parse(raw.toString()); } catch { return; }
+  if (!message || typeof message !== 'object') return;
+  if (message.type === 'input') {
+    const x = Number(message.x);
+    const y = Number(message.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const length = Math.hypot(x, y);
+    if (length > 1) {
+      player.inputX = x / length;
+      player.inputY = y / length;
+    } else {
+      player.inputX = Math.max(-1, Math.min(1, x));
+      player.inputY = Math.max(-1, Math.min(1, y));
+    }
+    player.lastInputAt = Date.now();
+  }
+}
+
+const gameWss = new WebSocketServer({ noServer: true });
+
+gameWss.on('connection', (socket, req, account) => {
+  if (match.players.size >= MAX_PLAYERS_PER_MATCH) {
+    send(socket, { type: 'error', message: 'Match is full' });
+    socket.close();
+    return;
+  }
+  const id = match.nextPlayerNumber++;
+  const spawn = spawnForNumber(id);
+  const player = {
+    id,
+    accountId: account.id,
+    username: account.username,
+    socket,
+    x: spawn[0],
+    y: spawn[1],
+    angle: 0,
+    inputX: 0,
+    inputY: 0,
+    territory: 25,
+    lastInputAt: Date.now()
+  };
+  match.players.set(player.id, player);
+  connections.set(socket, player);
+  paintStartTerritory(match, player);
+
+  const snapshot = matchSnapshot(match);
+  snapshot.self_id = player.id;
+  send(socket, snapshot);
+  broadcast(match, { type: 'player_joined', player: playerSnapshot(player) });
+
+  socket.on('message', (data) => handleGameMessage(player, data));
+  socket.on('close', () => removePlayer(match, player));
+  socket.on('error', () => removePlayer(match, player));
+});
+
+setInterval(() => {
+  const now = Date.now();
+  for (const player of match.players.values()) {
+    const idle = now - player.lastInputAt > 1000;
+    if (idle) { player.inputX = 0; player.inputY = 0; }
+    const length = Math.hypot(player.inputX, player.inputY);
+    if (length > 0.001) {
+      player.x += (player.inputX / Math.max(1, length)) * PLAYER_SPEED * (TICK_MS / 1000);
+      player.y += (player.inputY / Math.max(1, length)) * PLAYER_SPEED * (TICK_MS / 1000);
+      player.x = Math.max(20, Math.min(WORLD_WIDTH - 20, player.x));
+      player.y = Math.max(20, Math.min(WORLD_HEIGHT - 20, player.y));
+      player.angle = Math.atan2(player.inputY, player.inputX);
+      paintMovementTerritory(match, player);
+    }
+  }
+  if (match.players.size > 0) broadcast(match, matchSnapshot(match));
+}, TICK_MS);
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -258,7 +433,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const database = await checkDatabase();
       res.writeHead(200);
-      return res.end(JSON.stringify({ status: 'ok', database: database ? 'connected' : 'disconnected', game: 'ConquerX' }));
+      return res.end(JSON.stringify({ status: 'ok', database: database ? 'connected' : 'disconnected', game: 'ConquerX', realtime: 'websocket' }));
     } catch (error) {
       console.error('Database health check failed:', error.message);
       res.writeHead(503);
@@ -267,10 +442,25 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && pathname === '/') {
     res.writeHead(200);
-    return res.end(JSON.stringify({ name: 'ConquerX', status: 'online', version: '0.3.0' }));
+    return res.end(JSON.stringify({ name: 'ConquerX', status: 'online', version: '0.4.0', realtime: 'websocket', world: { width: WORLD_WIDTH, height: WORLD_HEIGHT } }));
   }
   res.writeHead(404);
   res.end(JSON.stringify({ error: 'Not Found' }));
+});
+
+const gamePath = '/ws';
+server.on('upgrade', async (req, socket, head) => {
+  try {
+    const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (requestUrl.pathname !== gamePath) { socket.destroy(); return; }
+    const token = requestUrl.searchParams.get('token') || '';
+    const account = await getAccountFromToken(token);
+    if (!account) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
+    gameWss.handleUpgrade(req, socket, head, (ws) => gameWss.emit('connection', ws, req, account));
+  } catch (error) {
+    console.error('WebSocket authentication failed:', error.message);
+    socket.destroy();
+  }
 });
 
 server.listen(port, '0.0.0.0', async () => {
