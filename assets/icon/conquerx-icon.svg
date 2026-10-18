@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0877d9"/><stop offset="1" stop-color="#082c68"/></linearGradient>
+ <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff5a3d"/><stop offset="1" stop-color="#d51f2f"/></linearGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffe45b"/><stop offset="1" stop-color="#f39b08"/></linearGradient>
+ <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="9" stdDeviation="7" flood-opacity=".42"/></filter>
+ <clipPath id="clip"><rect x="10" y="10" width="492" height="492" rx="92"/></clipPath>
+</defs>
+<rect x="10" y="10" width="492" height="492" rx="92" fill="#111827"/>
+<g clip-path="url(#clip)">
+ <rect width="512" height="512" fill="url(#bg)"/>
+ <path d="M-20 80 Q100 10 205 82 T535 55 L535 225 Q425 190 320 228 T-20 205Z" fill="#1d9bf0" opacity=".9"/>
+ <path d="M-20 330 Q85 250 180 320 T360 305 T535 350 L535 535 L-20 535Z" fill="#f3b21b"/>
+ <path d="M-20 280 Q65 205 142 252 T290 265 T535 215 L535 360 Q420 322 330 370 T-20 390Z" fill="#7c42d5" opacity=".92"/>
+ <path d="M170 105 Q230 70 292 108 L344 156 L315 218 L351 272 L312 337 L246 350 L189 318 L162 253 L125 214 L146 156Z" fill="url(#red)" stroke="#ffcb3d" stroke-width="8"/>
+ <g stroke="#fff" stroke-opacity=".18" stroke-width="3" fill="none"><path d="M35 120l90 40M80 55l45 75M390 60l-45 105M455 145l-100 55M65 425l110-85M420 420l-92-78"/></g>
+ <g filter="url(#shadow)">
+  <path d="M145 174 L145 90 Q205 55 268 92 Q245 122 205 129 Q176 137 145 174Z" fill="#e52e32" stroke="#4b1016" stroke-width="7"/>
+  <path d="M145 90 L145 305" stroke="#5b3a20" stroke-width="12"/>
+  <circle cx="145" cy="88" r="10" fill="#ffd34b" stroke="#5b3a20" stroke-width="5"/>
+  <circle cx="255" cy="206" r="67" fill="#202b3b" stroke="#0b1220" stroke-width="8"/>
+  <path d="M202 188 Q255 146 308 188 L296 239 Q255 268 214 239Z" fill="url(#red)"/>
+  <rect x="222" y="203" width="66" height="22" rx="11" fill="#101722"/>
+  <circle cx="240" cy="214" r="5" fill="#ffcf35"/><circle cx="272" cy="214" r="5" fill="#ffcf35"/>
+  <path d="M211 158 L229 126 L255 142 L281 126 L299 158 L286 173 L224 173Z" fill="url(#gold)" stroke="#6d4200" stroke-width="6"/>
+  <path d="M255 141l6 10 11 2-8 8 2 11-11-5-11 5 2-11-8-8 11-2z" fill="#e33a2e"/>
+ </g>
+ <g filter="url(#shadow)">
+  <rect x="54" y="348" width="404" height="103" rx="28" fill="#111827" fill-opacity=".94" stroke="#f5c53d" stroke-width="4"/>
+  <text x="256" y="411" text-anchor="middle" font-family="Arial, sans-serif" font-size="56" font-weight="900" letter-spacing="-2" fill="#fff7df" stroke="#090d16" stroke-width="9" paint-order="stroke">CONQUER</text>
+  <text x="256" y="465" text-anchor="middle" font-family="Arial, sans-serif" font-size="78" font-weight="900" fill="url(#gold)" stroke="#6a3900" stroke-width="8" paint-order="stroke">X</text>
+ </g>
+ <g opacity=".9"><circle cx="61" cy="270" r="17" fill="#29a9ff"/><circle cx="452" cy="265" r="17" fill="#6ee25c"/><circle cx="90" cy="92" r="12" fill="#ffcf39"/><circle cx="431" cy="98" r="12" fill="#b15cff"/></g>
+</g>
+<rect x="10" y="10" width="492" height="492" rx="92" fill="none" stroke="#ffffff" stroke-opacity=".2" stroke-width="5"/>
+</svg>
