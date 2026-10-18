@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource path="res://game/scripts/game.gd" type="Script" id="1"]
 [ext_resource path="res://game/scripts/visual_effects.gd" type="Script" id="2"]
 [ext_resource path="res://game/scripts/language_controller.gd" type="Script" id="3"]
 [ext_resource path="res://game/scripts/ui_polish.gd" type="Script" id="4"]
+[ext_resource path="res://game/scripts/virtual_joystick.gd" type="Script" id="5"]
 
 [node name="ConquerXGame" type="Node2D"]
 script = ExtResource("1")
@@ -95,6 +96,17 @@ offset_bottom = 690.0
 theme_override_colors/font_color = Color(0.7, 0.76, 0.86, 0.9)
 theme_override_font_sizes/font_size = 16
 text = "Touch & drag to move"
+
+[node name="VirtualJoystick" type="Control" parent="HUD"]
+layout_mode = 0
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -254.0
+offset_right = 264.0
+offset_bottom = -14.0
+mouse_filter = 0
+script = ExtResource("5")
 
 [node name="DeathPanel" type="Panel" parent="HUD"]
 offset_left = 410.0
