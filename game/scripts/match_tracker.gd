@@ -12,14 +12,24 @@ func _process(_delta: float) -> void:
     last_status = status
     if status != "finished":
         return
-    var players: Dictionary = game.get("players")
-    var self_id := int(game.get("self_id"))
-    var stats := {"kills": 0, "territory": 0, "win": false}
-    if players.has(self_id):
-        var player: Dictionary = players[self_id]
-        stats.kills = int(player.get("kills", 0))
-        stats.territory = int(player.get("territory", 0))
-    var end_data = game.get("last_match_result")
-    if typeof(end_data) == TYPE_DICTIONARY:
-        stats.win = int(end_data.get("place", 99)) == 1
-    Seasons.record_match(stats)
+
+    # The server writes match_results and updates season/daily challenges from
+    # authoritative match statistics. The client never awards or increments
+    # competitive progress locally anymore.
+    _sync_server_season(game)
+
+func _sync_server_season(game: Node) -> void:
+    var token := str(game.get_meta("session_token", ""))
+    if token.is_empty():
+        return
+    var request := HTTPRequest.new()
+    add_child(request)
+    request.request_completed.connect(func(result, code, _headers, body):
+        request.queue_free()
+        if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+            return
+        var data = JSON.parse_string(body.get_string_from_utf8())
+        if typeof(data) == TYPE_DICTIONARY:
+            Seasons.apply_server_data(data)
+    )
+    request.request("https://app-4729a9fe-87fc-4f1b-9248-112725e0db57.cleverapps.io/season", PackedStringArray(["Authorization: Bearer %s" % token]))
