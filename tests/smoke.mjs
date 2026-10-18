@@ -21,7 +21,7 @@ const checks = [
   ['leaderboard route', /\/leaderboard/],
   ['profile route', /\/profile/],
   ['game WebSocket client', /WebSocketPeer/],
-  ['game matchmaking handling', /t\s*===\s*"matchmaking"/],
+  ['game matchmaking handling', /t\s*(?:===|==)\s*"matchmaking"/],
   ['match end UI', /_show_match_end/],
   ['shop UI', /_show_shop/],
   ['settings UI', /_show_settings/],
