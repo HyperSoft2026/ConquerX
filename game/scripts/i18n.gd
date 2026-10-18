@@ -26,8 +26,9 @@ func set_language(value:String) -> void:
 func is_arabic() -> bool:
     return language == "ar"
 
-func direction(control:Control) -> void:
-    control.layout_direction = Control.LAYOUT_DIRECTION_RTL if is_arabic() else Control.LAYOUT_DIRECTION_LTR
+func direction(control:Node) -> void:
+    if control is Control:
+        control.layout_direction = Control.LAYOUT_DIRECTION_RTL if is_arabic() else Control.LAYOUT_DIRECTION_LTR
 
 func apply_tree(root:Node) -> void:
     for node in root.get_children():
