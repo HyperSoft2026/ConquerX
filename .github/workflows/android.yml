@@ -14,12 +14,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Export signed Android APK
+      - name: Export Android APK
         run: |
           mkdir -p build
-          mkdir -p /root/.config/godot
           godot --headless --path . --editor --quit
-          godot --headless --path . --export-release "Android" build/ConquerX.apk
+          godot --headless --path . --export-debug "Android" build/ConquerX.apk
 
       - name: Verify APK
         run: |
