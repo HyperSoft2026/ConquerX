@@ -58,7 +58,7 @@ jobs:
         run: |
           mkdir -p build
           godot --headless --path . --editor --quit
-          godot --headless --path . --export-debug "Android" build/ConquerX.apk
+          godot --verbose --headless --path . --export-debug "Android" build/ConquerX.apk
 
       - name: Verify APK
         run: |
