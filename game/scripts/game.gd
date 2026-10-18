@@ -228,8 +228,6 @@ func _process(delta: float) -> void:
         if reconnect_timer <= 0.0:
             socket = WebSocketPeer.new()
             _connect_game()
-    $HUD/MiniMap.update_snapshot(world_size, grid_width, grid_height, cell_size, territory, players, self_id)
-    _update_live_leaderboard()
     queue_redraw()
 
 func _connect_game() -> void:
@@ -264,6 +262,8 @@ func _handle_message(text: String) -> void:
         _apply_players(data.get("players",[]),false)
     elif t == "player_left":
         players.erase(int(data.get("id",0)))
+        $HUD/MiniMap.update_snapshot(world_size, grid_width, grid_height, cell_size, territory, players, self_id)
+        _update_live_leaderboard()
     elif t == "death":
         dead = true
         input_vector = Vector2.ZERO
@@ -306,6 +306,8 @@ func _apply_players(items:Array, _move_camera:bool) -> void:
             if id > 0:
                 next[id] = item
     players = next
+    $HUD/MiniMap.update_snapshot(world_size, grid_width, grid_height, cell_size, territory, players, self_id)
+    _update_live_leaderboard()
     if players.has(self_id):
         var me:Dictionary = players[self_id]
         dead = bool(me.get("dead", false))
