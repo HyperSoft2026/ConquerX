@@ -50,7 +50,7 @@ func _gui_input(event: InputEvent) -> void:
         accept_event()
 
 func _update_from_position(screen_position: Vector2) -> void:
-    var local_position := screen_position - global_position
+    var local_position := screen_position
     var center := size * 0.5
     var offset := local_position - center
     if offset.length() > RADIUS:
