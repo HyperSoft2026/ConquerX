@@ -3,6 +3,7 @@ extends Node2D
 const SERVER_URL := "https://app-4729a9fe-87fc-4f1b-9248-112725e0db57.cleverapps.io"
 const LOGIN_POLL_SECONDS := 2.0
 const LOGIN_TIMEOUT_SECONDS := 600.0
+const GAME_SCENE := preload("res://scenes/game.tscn")
 
 @onready var status_value: Label = $StatusPanel/StatusValue
 @onready var continue_button: Button = $ContinueButton
@@ -124,7 +125,11 @@ func _on_continue_pressed() -> void:
     if not logged_in:
         status_value.text = "Please sign in with Discord first."
         return
-    status_value.text = "Login complete. Main menu is next."
+    var gameplay = GAME_SCENE.instantiate()
+    gameplay.set_meta("session_token", session_token)
+    gameplay.set_meta("account", account)
+    get_tree().root.add_child(gameplay)
+    hide()
 
 func _make_session_id() -> String:
     var rng := RandomNumberGenerator.new()
