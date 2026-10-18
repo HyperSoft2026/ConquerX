@@ -41,7 +41,7 @@ offset_top = 30.0
 offset_right = 510.0
 offset_bottom = 85.0
 theme_override_font_sizes/font_size = 28
-text = "Server connection"
+text = "Account"
 
 [node name="StatusValue" type="Label" parent="StatusPanel"]
 offset_left = 30.0
@@ -50,7 +50,7 @@ offset_right = 510.0
 offset_bottom = 140.0
 theme_override_colors/font_color = Color(0.45, 0.9, 0.62, 1)
 theme_override_font_sizes/font_size = 24
-text = "Checking..."
+text = "Checking server..."
 
 [node name="Hint" type="Label" parent="StatusPanel"]
 offset_left = 30.0
@@ -59,15 +59,34 @@ offset_right = 510.0
 offset_bottom = 205.0
 theme_override_colors/font_color = Color(0.58, 0.65, 0.78, 1)
 theme_override_font_sizes/font_size = 18
-text = "The online connection will be used for accounts,\nmatchmaking and multiplayer gameplay."
+text = "Sign in with Discord to save your progress\nand access your ConquerX account."
+
+[node name="DiscordLoginButton" type="Button" parent="."]
+offset_left = 700.0
+offset_top = 245.0
+offset_right = 1130.0
+offset_bottom = 325.0
+theme_override_font_sizes/font_size = 25
+text = "Login with Discord"
 
 [node name="ContinueButton" type="Button" parent="."]
 offset_left = 700.0
-offset_top = 285.0
+offset_top = 345.0
 offset_right = 1130.0
-offset_bottom = 365.0
-theme_override_font_sizes/font_size = 26
+offset_bottom = 415.0
+theme_override_font_sizes/font_size = 23
 text = "Continue"
+disabled = true
+
+[node name="AccountSummary" type="Label" parent="."]
+offset_left = 700.0
+offset_top = 445.0
+offset_right = 1130.0
+offset_bottom = 510.0
+theme_override_colors/font_color = Color(0.58, 0.65, 0.78, 1)
+theme_override_font_sizes/font_size = 17
+text = "Not signed in"
+autowrap_mode = 2
 
 [node name="Version" type="Label" parent="."]
 offset_left = 70.0
