@@ -43,6 +43,7 @@ var music_playback: AudioStreamGeneratorPlayback
 var sfx_playback: AudioStreamGeneratorPlayback
 var music_phase := 0.0
 var camera_target := WORLD_SIZE * 0.5
+var live_board_label:Label
 var reconnect_timer := 0.0
 var reconnect_delay := 1.0
 
@@ -65,6 +66,7 @@ func _ready() -> void:
     $HUD/JoystickHint.visible = false
     $HUD/VirtualJoystick.vector_changed.connect(_on_joystick_vector_changed)
     _add_panel_close_buttons()
+    _create_live_leaderboard()
     session_token = str(get_meta("session_token", ""))
     account = get_meta("account", {})
     _setup_audio()
@@ -86,6 +88,44 @@ func _ready() -> void:
         status_label.text = "Session missing"
         return
     _connect_game()
+
+func _create_live_leaderboard() -> void:
+    var panel := Panel.new()
+    panel.position = Vector2(850, 88)
+    panel.size = Vector2(205, 124)
+    panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var style := StyleBoxFlat.new()
+    style.bg_color = Color(0.025, 0.055, 0.12, 0.78)
+    style.border_color = Color("#2d6da6")
+    style.set_border_width_all(1)
+    style.set_corner_radius_all(12)
+    panel.add_theme_stylebox_override("panel", style)
+    $HUD.add_child(panel)
+    live_board_label = Label.new()
+    live_board_label.position = Vector2(10, 7)
+    live_board_label.size = Vector2(185, 110)
+    live_board_label.add_theme_font_size_override("font_size", 13)
+    live_board_label.add_theme_color_override("font_color", Color("#e8f6ff"))
+    live_board_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    panel.add_child(live_board_label)
+
+func _update_live_leaderboard() -> void:
+    if live_board_label == null:
+        return
+    var ranked:Array = []
+    for key in players.keys():
+        var player:Dictionary = players[key]
+        ranked.append({"id":int(key), "name":str(player.get("username", "Player")), "territory":int(player.get("territory", 0))})
+    ranked.sort_custom(func(a, b): return int(a["territory"]) > int(b["territory"]))
+    var output := "TOP PLAYERS\n"
+    var my_rank := 0
+    for i in range(ranked.size()):
+        if int(ranked[i]["id"]) == self_id:
+            my_rank = i + 1
+        if i < 5:
+            output += "%d. %s  %d\n" % [i + 1, str(ranked[i]["name"]).left(12), int(ranked[i]["territory"])]
+    output += "YOUR RANK  #%d" % my_rank if my_rank > 0 else "YOUR RANK  —"
+    live_board_label.text = output
 
 func _add_panel_close_buttons() -> void:
     _add_panel_close_button(profile_panel, 510, 12)
@@ -188,6 +228,8 @@ func _process(delta: float) -> void:
         if reconnect_timer <= 0.0:
             socket = WebSocketPeer.new()
             _connect_game()
+    $HUD/MiniMap.update_snapshot(world_size, grid_width, grid_height, cell_size, territory, players, self_id)
+    _update_live_leaderboard()
     queue_redraw()
 
 func _connect_game() -> void:
