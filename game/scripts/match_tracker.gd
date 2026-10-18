@@ -1,18 +1,17 @@
 extends Node
 
-var handled_match := ""
+var last_status := ""
 
 func _process(_delta: float) -> void:
     var game := get_tree().root.get_node_or_null("ConquerXGame")
     if game == null:
         return
     var status := str(game.get("match_status"))
+    if status == last_status:
+        return
+    last_status = status
     if status != "finished":
         return
-    var match_id := str(game.get("current_match_id", "finished"))
-    if match_id == handled_match:
-        return
-    handled_match = match_id
     var players: Dictionary = game.get("players")
     var self_id := int(game.get("self_id"))
     var stats := {"kills": 0, "territory": 0, "win": false}
