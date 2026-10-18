@@ -102,7 +102,7 @@ func _show_home() -> void:
     $DiscordLoginButton.visible = false
     $ContinueButton.visible = false
     $AccountSummary.visible = false
-    $Version.text = "ConquerX • Multiplayer Season 1"
+    $Version.text = "ConquerX • %s • Season %s" % [I18n.tr("multiplayer_note"), Seasons.SEASON_ID]
     _rebuild_home()
 
 func _rebuild_home() -> void:
@@ -112,8 +112,13 @@ func _rebuild_home() -> void:
     home_panel = Panel.new()
     home_panel.position = Vector2(90, 185)
     home_panel.size = Vector2(1100, 450)
+    home_panel.modulate.a = 0.0
     add_child(home_panel)
     I18n.direction(home_panel)
+    var intro := home_panel.create_tween()
+    intro.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+    intro.tween_property(home_panel, "modulate:a", 1.0, 0.24)
+    intro.parallel().tween_property(home_panel, "position", Vector2(90, 175), 0.24)
 
     var header := Label.new()
     header.position = Vector2(36, 24)
@@ -122,17 +127,18 @@ func _rebuild_home() -> void:
     header.add_theme_font_size_override("font_size", 20)
     home_panel.add_child(header)
 
-    _home_button(I18n.tr("play_online"), Vector2(40, 92), Vector2(500, 92), Callable(self, "_play_online"))
-    _home_button(I18n.tr("shop"), Vector2(560, 92), Vector2(240, 92), Callable(self, "_home_shop"))
-    _home_button(I18n.tr("profile"), Vector2(820, 92), Vector2(240, 92), Callable(self, "_home_profile"))
-    _home_button(I18n.tr("skins"), Vector2(40, 205), Vector2(330, 82), Callable(self, "_home_skins"))
-    _home_button(I18n.tr("settings"), Vector2(385, 205), Vector2(330, 82), Callable(self, "_home_settings"))
-    _home_button(I18n.tr("leaderboard"), Vector2(730, 205), Vector2(330, 82), Callable(self, "_home_leaderboard"))
+    _home_button(I18n.tr("play_online"), Vector2(40, 92), Vector2(500, 82), Callable(self, "_play_online"))
+    _home_button(I18n.tr("shop"), Vector2(560, 92), Vector2(240, 82), Callable(self, "_home_shop"))
+    _home_button(I18n.tr("profile"), Vector2(820, 92), Vector2(240, 82), Callable(self, "_home_profile"))
+    _home_button(I18n.tr("skins"), Vector2(40, 195), Vector2(250, 72), Callable(self, "_home_skins"))
+    _home_button(I18n.tr("settings"), Vector2(305, 195), Vector2(250, 72), Callable(self, "_home_settings"))
+    _home_button(I18n.tr("leaderboard"), Vector2(570, 195), Vector2(250, 72), Callable(self, "_home_leaderboard"))
+    _home_button("🏆 " + ("الموسم والمهام" if I18n.is_arabic() else "Season & Missions"), Vector2(835, 195), Vector2(225, 72), Callable(self, "_home_season"))
 
     var note := Label.new()
-    note.position = Vector2(40, 315)
-    note.size = Vector2(1020, 95)
-    note.text = "🌐 %s\n🏆 %s" % [I18n.tr("multiplayer_note"), I18n.tr("reward_note")]
+    note.position = Vector2(40, 292)
+    note.size = Vector2(1020, 110)
+    note.text = "🌐 %s\n🏆 %s\n✨ %s • %s" % [I18n.tr("multiplayer_note"), I18n.tr("reward_note"), Seasons.season_name(), ("المستوى %d" % Seasons.season_level()) if I18n.is_arabic() else ("Level %d" % Seasons.season_level())]
     note.add_theme_font_size_override("font_size", 17)
     home_panel.add_child(note)
 
@@ -141,10 +147,17 @@ func _home_button(text:String, pos:Vector2, size:Vector2, callback:Callable) -> 
     b.text = text
     b.position = pos
     b.size = size
-    b.add_theme_font_size_override("font_size", 21)
+    b.add_theme_font_size_override("font_size", 19)
     b.pressed.connect(callback)
+    b.mouse_entered.connect(func(): _button_hover(b, true))
+    b.mouse_exited.connect(func(): _button_hover(b, false))
     home_panel.add_child(b)
     home_buttons.append(b)
+
+func _button_hover(button:Button, inside:bool) -> void:
+    var tween := create_tween()
+    tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+    tween.tween_property(button, "scale", Vector2(1.025, 1.025) if inside else Vector2.ONE, 0.10)
 
 func _play_online() -> void:
     var gameplay = GAME_SCENE.instantiate()
@@ -171,19 +184,37 @@ func _home_leaderboard() -> void:
         for row in data.get("leaderboard",[]): lines.append("#%s  %s  • %s %s • %s %s" % [str(row.get("rank",0)),str(row.get("username","Player")),I18n.tr("gold"),str(row.get("gold",0)),I18n.tr("wins"),str(row.get("wins",0))])
         _show_overlay(I18n.tr("leaderboard"), lines))
 
+func _home_season() -> void:
+    var lines:Array = []
+    lines.append(("الموسم: " if I18n.is_arabic() else "Season: ") + Seasons.season_name())
+    lines.append(("مستوى الموسم: %d • XP: %d" % [Seasons.season_level(), Seasons.season_xp]) if I18n.is_arabic() else ("Season level: %d • XP: %d" % [Seasons.season_level(), Seasons.season_xp]))
+    lines.append("")
+    for c in Seasons.get_daily():
+        var label := str(c.ar) if I18n.is_arabic() else str(c.en)
+        lines.append("• %s — %d/%d" % [label, Seasons.progress(str(c.id)), int(c.target)])
+    _show_overlay(("الموسم والمهام اليومية" if I18n.is_arabic() else "Season & Daily Missions"), lines)
+
 func _home_settings() -> void:
-    _show_overlay(I18n.tr("settings"), ["ConquerX 1280×720 • Android landscape", "Arabic / English • saved automatically", "Sound, music, effects and visual quality are configurable in-match."])
+    _show_overlay(I18n.tr("settings"), ["ConquerX 1280×720 • Android landscape", "Arabic / English • saved automatically", "Adaptive quality: %s • %d FPS" % [Performance.quality_name(), Performance.target_fps], "Sound, music and effects can be controlled in-match."])
 
 func _show_overlay(title:String, lines:Array) -> void:
     if home_overlay != null: home_overlay.queue_free()
     home_overlay = Panel.new()
     home_overlay.position = Vector2(270, 120)
     home_overlay.size = Vector2(740, 500)
+    home_overlay.modulate.a = 0.0
     add_child(home_overlay)
     var t := Label.new(); t.position=Vector2(30,25); t.size=Vector2(680,50); t.text=title; t.add_theme_font_size_override("font_size",28); home_overlay.add_child(t)
     var body := Label.new(); body.position=Vector2(30,85); body.size=Vector2(680,320); body.text="\n".join(lines); body.add_theme_font_size_override("font_size",19); home_overlay.add_child(body)
-    var close := Button.new(); close.text=I18n.tr("close"); close.position=Vector2(30,420); close.size=Vector2(680,55); close.pressed.connect(func(): home_overlay.queue_free(); home_overlay=null); home_overlay.add_child(close)
+    var close := Button.new(); close.text=I18n.tr("close"); close.position=Vector2(30,420); close.size=Vector2(680,55); close.pressed.connect(func(): _close_overlay()); home_overlay.add_child(close)
     I18n.direction(home_overlay)
+    var tween := create_tween(); tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT); tween.tween_property(home_overlay,"modulate:a",1.0,0.18); tween.parallel().tween_property(home_overlay,"scale",Vector2.ONE,0.18)
+
+func _close_overlay() -> void:
+    if home_overlay == null: return
+    var panel := home_overlay
+    home_overlay = null
+    var tween := create_tween(); tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN); tween.tween_property(panel,"modulate:a",0.0,0.12); tween.tween_callback(panel.queue_free)
 
 func _http_get(path:String, callback:Callable) -> void:
     var request:=HTTPRequest.new(); add_child(request)
