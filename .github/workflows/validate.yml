@@ -20,7 +20,7 @@ jobs:
           cache: false
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --package-lock=false
 
       - name: Validate server and gameplay integration
         run: npm run check
