@@ -1,6 +1,5 @@
 extends Node2D
 
-const SERVER_URL := "https://app-4729a9fe-87fc-4f1b-9248-112725e0db57.cleverapps.io"
 const WS_URL := "wss://app-4729a9fe-87fc-4f1b-9248-112725e0db57.cleverapps.io/ws?token="
 const INPUT_SEND_INTERVAL := 0.05
 const WORLD_SIZE := Vector2(4000.0, 2400.0)
@@ -51,7 +50,7 @@ func _ready() -> void:
     _connect_game()
 
 func _connect_game() -> void:
-    var error := socket.connect_to_url(WS_URL + Uri.encode_component(session_token, ""))
+    var error := socket.connect_to_url(WS_URL + session_token.uri_encode())
     if error != OK:
         status_label.text = "Connection failed"
         return
