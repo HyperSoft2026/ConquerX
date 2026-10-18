@@ -195,7 +195,7 @@ func _rebuild_home() -> void:
     var avatar := Label.new()
     avatar.position = Vector2(20, 18)
     avatar.size = Vector2(210, 48)
-    avatar.text = "✦   " + username
+    avatar.text = "●   " + username
     avatar.add_theme_font_size_override("font_size", 22)
     avatar.add_theme_color_override("font_color", Color("#ffffff"))
     player_card.add_child(avatar)
@@ -220,9 +220,9 @@ func _rebuild_home() -> void:
     xp_bar.value = int(account.get("xp", 0)) % 1000
     xp_bar.show_percentage = false
     player_card.add_child(xp_bar)
-    _stat_chip("🟡  %s" % _short_number(int(account.get("gold", 0))), Vector2(12, 190), Vector2(226, 48), Color("#ffca3a"))
-    _stat_chip("💎  %s" % _short_number(int(account.get("gems", 0))), Vector2(12, 250), Vector2(226, 48), Color("#ff72e5"))
-    var profile := _home_button("👤  " + I18n.text_for("profile"), Vector2(12, 310), Vector2(226, 46), Callable(self, "_home_profile"))
+    _stat_chip("%s  %s" % [I18n.text_for("gold"), _short_number(int(account.get("gold", 0)))], Vector2(12, 190), Vector2(226, 48), Color("#ffca3a"))
+    _stat_chip("%s  %s" % [I18n.text_for("gems"), _short_number(int(account.get("gems", 0)))], Vector2(12, 250), Vector2(226, 48), Color("#ff72e5"))
+    var profile := _home_button(I18n.text_for("profile"), Vector2(12, 310), Vector2(226, 46), Callable(self, "_home_profile"))
     profile.add_theme_font_size_override("font_size", 17)
 
     # Center: a single primary play card. The mascot stays beside the text, never over the button.
@@ -234,7 +234,7 @@ func _rebuild_home() -> void:
     var mode_title := Label.new()
     mode_title.position = Vector2(22, 22)
     mode_title.size = Vector2(330, 54)
-    mode_title.text = "⚔  " + I18n.text_for("arena_title")
+    mode_title.text = I18n.text_for("arena_title")
     mode_title.add_theme_font_size_override("font_size", 25)
     mode_title.add_theme_color_override("font_color", Color("#fff7d1"))
     play_card.add_child(mode_title)
@@ -261,12 +261,12 @@ func _rebuild_home() -> void:
     nav_title.add_theme_font_size_override("font_size", 21)
     nav_title.add_theme_color_override("font_color", Color("#9deeff"))
     home_panel.add_child(nav_title)
-    _home_button("🛍  " + I18n.text_for("shop"), Vector2(850, 120), Vector2(165, 66), Callable(self, "_home_shop"))
+    _home_button(I18n.text_for("shop"), Vector2(850, 120), Vector2(165, 66), Callable(self, "_home_shop"))
     _home_button("👤  " + I18n.text_for("profile"), Vector2(1025, 120), Vector2(165, 66), Callable(self, "_home_profile"))
-    _home_button("🎭  " + I18n.text_for("skins"), Vector2(850, 198), Vector2(165, 66), Callable(self, "_home_skins"))
-    _home_button("🏆  " + I18n.text_for("leaderboard"), Vector2(1025, 198), Vector2(165, 66), Callable(self, "_home_leaderboard"))
-    _home_button("📋  " + I18n.text_for("daily_missions"), Vector2(850, 276), Vector2(165, 66), Callable(self, "_home_season"))
-    _home_button("⚙  " + I18n.text_for("settings"), Vector2(1025, 276), Vector2(165, 66), Callable(self, "_home_settings"))
+    _home_button(I18n.text_for("skins"), Vector2(850, 198), Vector2(165, 66), Callable(self, "_home_skins"))
+    _home_button(I18n.text_for("leaderboard"), Vector2(1025, 198), Vector2(165, 66), Callable(self, "_home_leaderboard"))
+    _home_button(I18n.text_for("daily_missions"), Vector2(850, 276), Vector2(165, 66), Callable(self, "_home_season"))
+    _home_button(I18n.text_for("settings"), Vector2(1025, 276), Vector2(165, 66), Callable(self, "_home_settings"))
 
     var progress := Panel.new()
     progress.position = Vector2(22, 455)
@@ -276,12 +276,13 @@ func _rebuild_home() -> void:
     var progress_label := Label.new()
     progress_label.position = Vector2(18, 10)
     progress_label.size = Vector2(1150, 78)
-    progress_label.text = "🌟  %s     •     %s     •     %s" % [Seasons.season_name(), ("مستوى الموسم %d" % Seasons.season_level) if I18n.is_arabic() else ("SEASON LEVEL %d" % Seasons.season_level), I18n.text_for("reward_note")]
+    progress_label.text = "%s     •     %s     •     %s" % [Seasons.season_name(), ("مستوى الموسم %d" % Seasons.season_level) if I18n.is_arabic() else ("SEASON LEVEL %d" % Seasons.season_level), I18n.text_for("reward_note")]
     progress_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     progress_label.add_theme_font_size_override("font_size", 16)
     progress_label.add_theme_color_override("font_color", Color("#e8faff"))
     progress.add_child(progress_label)
 
+    I18n.apply_tree(home_panel)
     if has_node("Mascot"):
         $Mascot.position = Vector2(715, 330)
         $Mascot.scale = Vector2(0.34, 0.34)
@@ -393,7 +394,7 @@ func _show_shop_panel(data:Dictionary, skins_only:bool) -> void:
     var balance := Label.new()
     balance.position = Vector2(24, 58)
     balance.size = Vector2(850, 32)
-    balance.text = "%s: %s     💎 %s" % [I18n.text_for("gold"), str(account.get("gold", 0)), str(account.get("gems", 0))]
+    balance.text = "%s: %s     %s: %s" % [I18n.text_for("gold"), str(account.get("gold", 0)), I18n.text_for("gems"), str(account.get("gems", 0))]
     balance.add_theme_font_size_override("font_size", 18)
     home_overlay.add_child(balance)
     var scroll := ScrollContainer.new()
@@ -423,7 +424,7 @@ func _show_shop_panel(data:Dictionary, skins_only:bool) -> void:
             skin_button.text = ("✓  " if equipped else "◉  ") + ("المظهر %02d • مجهز" % id if equipped and I18n.is_arabic() else ("المظهر %02d • اضغط للتجهيز" % id if I18n.is_arabic() else ("Skin %02d • Equipped" % id if equipped else "Skin %02d • Equip" % id)))
             skin_button.pressed.connect(_equip_home_skin.bind(id))
         else:
-            skin_button.text = ("شراء المظهر %02d" % id if I18n.is_arabic() else "Buy Skin %02d" % id) + "   •   G %s / 💎 %s" % [str(skin.get("gold_cost", 0)), str(skin.get("gems_cost", 0))]
+            skin_button.text = ("شراء المظهر %02d" % id if I18n.is_arabic() else "Buy Skin %02d" % id) + "   •   G %s / Gems %s" % [str(skin.get("gold_cost", 0)), str(skin.get("gems_cost", 0))]
             skin_button.pressed.connect(_buy_shop_skin.bind(id))
         list.add_child(skin_button)
     var close := Button.new()
