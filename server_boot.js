@@ -1,15 +1,10 @@
 const http = require('node:http');
 const { Pool } = require('pg');
 
-// Clever Cloud exposes one public port. Run the existing game server behind
-// this small gateway so we can add authenticated season endpoints without
-// rewriting the established multiplayer server.
 const PUBLIC_PORT = Number(process.env.PORT || 8080);
 const INTERNAL_PORT = Number(process.env.CONQUERX_INTERNAL_PORT || 3001);
 process.env.PORT = String(INTERNAL_PORT);
 
-// The previous deployment crashed when an error handler tried to send a
-// second response. Ignore duplicate writeHead calls after headers were sent.
 const originalWriteHead = http.ServerResponse.prototype.writeHead;
 http.ServerResponse.prototype.writeHead = function patchedWriteHead(...args) {
   if (this.headersSent) return this;
@@ -50,8 +45,6 @@ async function accountFromToken(token) {
 }
 
 async function setupSeasonDatabase() {
-  // These tables are independent of the old local ConfigFile system. All
-  // competitive progress is now calculated from server-created match_results.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS season_progress (
       account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -72,17 +65,14 @@ async function setupSeasonDatabase() {
     CREATE INDEX IF NOT EXISTS idx_daily_challenges_account ON daily_challenges(account_id, season_id, challenge_date);
   `);
 
-  // The trigger is the security boundary: clients cannot submit challenge
-  // progress. Only a match_results row written by the authoritative server
-  // can advance missions and award their rewards.
   await pool.query(`
     CREATE OR REPLACE FUNCTION conquerx_apply_match_challenges() RETURNS trigger AS $$
     DECLARE
       today DATE := CURRENT_DATE;
       c RECORD;
       inc INTEGER;
-      old_progress INTEGER;
       new_progress INTEGER;
+      was_claimed BOOLEAN;
     BEGIN
       INSERT INTO season_progress(account_id, season_id, season_xp)
       VALUES(NEW.account_id, '${SEASON_ID}', 50 + NEW.kills * 10 + CASE WHEN NEW.place = 1 THEN 100 ELSE 0 END)
@@ -101,16 +91,18 @@ async function setupSeasonDatabase() {
           WHEN 'kills' THEN NEW.kills
           ELSE NEW.territory
         END;
+
         INSERT INTO daily_challenges(account_id,season_id,challenge_date,challenge_id,progress)
         VALUES(NEW.account_id,'${SEASON_ID}',today,c.id,LEAST(c.target,inc))
         ON CONFLICT(account_id,season_id,challenge_date,challenge_id) DO UPDATE
         SET progress = LEAST(c.target, daily_challenges.progress + EXCLUDED.progress)
         RETURNING progress INTO new_progress;
 
-        SELECT progress, claimed INTO old_progress, c.claimed FROM daily_challenges
+        SELECT claimed INTO was_claimed
+        FROM daily_challenges
         WHERE account_id=NEW.account_id AND season_id='${SEASON_ID}' AND challenge_date=today AND challenge_id=c.id;
 
-        IF new_progress >= c.target AND NOT c.claimed THEN
+        IF new_progress >= c.target AND NOT was_claimed THEN
           UPDATE daily_challenges SET claimed=TRUE,claimed_at=NOW()
           WHERE account_id=NEW.account_id AND season_id='${SEASON_ID}' AND challenge_date=today AND challenge_id=c.id;
           UPDATE accounts SET gold=gold+c.reward_gold, xp=xp+c.reward_xp, updated_at=NOW() WHERE id=NEW.account_id;
