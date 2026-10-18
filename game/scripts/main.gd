@@ -117,38 +117,132 @@ func _rebuild_home() -> void:
     if not logged_in: return
     if home_panel != null: home_panel.queue_free()
     home_buttons.clear()
+
+    # Landscape-first home screen: 1280x720 canvas with clear zones for touch.
     home_panel = Panel.new()
-    home_panel.position = Vector2(90, 185)
-    home_panel.size = Vector2(1100, 450)
+    home_panel.position = Vector2(28, 118)
+    home_panel.size = Vector2(1224, 570)
+    home_panel.add_theme_stylebox_override("panel", _menu_style(Color(0.025, 0.12, 0.31, 0.92), Color("#37d9ff"), 24, 3))
     home_panel.modulate.a = 0.0
     add_child(home_panel)
-    I18n.direction(home_panel)
     var intro := home_panel.create_tween()
     intro.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-    intro.tween_property(home_panel, "modulate:a", 1.0, 0.24)
-    intro.parallel().tween_property(home_panel, "position", Vector2(90, 175), 0.24)
+    intro.tween_property(home_panel, "modulate:a", 1.0, 0.22)
+    intro.parallel().tween_property(home_panel, "position", Vector2(28, 108), 0.22)
 
-    var header := Label.new()
-    header.position = Vector2(36, 24)
-    header.size = Vector2(1020, 48)
-    header.text = "%s  •  %s %s     %s %s     %s %s     %s %s" % [str(account.get("username","Player")), I18n.text_for("level"), str(account.get("level",1)), I18n.text_for("gold"), str(account.get("gold",0)), I18n.text_for("gems"), str(account.get("gems",0)), I18n.text_for("wins"), str(account.get("wins",0))]
-    header.add_theme_font_size_override("font_size", 20)
-    home_panel.add_child(header)
+    # Top status strip
+    var greeting := Label.new()
+    greeting.position = Vector2(28, 18)
+    greeting.size = Vector2(700, 44)
+    greeting.text = "%s, %s!" % [I18n.text_for("welcome"), str(account.get("username", "Player"))]
+    greeting.add_theme_font_size_override("font_size", 25)
+    greeting.add_theme_color_override("font_color", Color("#ffffff"))
+    home_panel.add_child(greeting)
 
-    _home_button(I18n.text_for("play_online"), Vector2(40, 92), Vector2(500, 82), Callable(self, "_play_online"))
-    _home_button(I18n.text_for("shop"), Vector2(560, 92), Vector2(240, 82), Callable(self, "_home_shop"))
-    _home_button(I18n.text_for("profile"), Vector2(820, 92), Vector2(240, 82), Callable(self, "_home_profile"))
-    _home_button(I18n.text_for("skins"), Vector2(40, 195), Vector2(250, 72), Callable(self, "_home_skins"))
-    _home_button(I18n.text_for("settings"), Vector2(305, 195), Vector2(250, 72), Callable(self, "_home_settings"))
-    _home_button(I18n.text_for("leaderboard"), Vector2(570, 195), Vector2(250, 72), Callable(self, "_home_leaderboard"))
-    _home_button("🏆 " + ("الموسم والمهام" if I18n.is_arabic() else "Season & Missions"), Vector2(835, 195), Vector2(225, 72), Callable(self, "_home_season"))
+    _stat_chip("🟡  %s  %s" % [I18n.text_for("gold"), _short_number(int(account.get("gold", 0)))], Vector2(28, 70), Vector2(205, 48), Color("#ffca3a"))
+    _stat_chip("💎  %s  %s" % [I18n.text_for("gems"), _short_number(int(account.get("gems", 0)))], Vector2(245, 70), Vector2(205, 48), Color("#ff72e5"))
+    _stat_chip("⭐  %s %s" % [I18n.text_for("level"), str(account.get("level", 1))], Vector2(462, 70), Vector2(175, 48), Color("#7ee7ff"))
 
-    var note := Label.new()
-    note.position = Vector2(40, 292)
-    note.size = Vector2(1020, 110)
-    note.text = "🌐 %s\n🏆 %s\n✨ %s • %s" % [I18n.text_for("multiplayer_note"), I18n.text_for("reward_note"), Seasons.season_name(), ("المستوى %d" % Seasons.season_level) if I18n.is_arabic() else ("Level %d" % Seasons.season_level)]
-    note.add_theme_font_size_override("font_size", 17)
-    home_panel.add_child(note)
+    # Large, primary play card
+    var play_card := Panel.new()
+    play_card.position = Vector2(28, 142)
+    play_card.size = Vector2(600, 300)
+    play_card.add_theme_stylebox_override("panel", _menu_style(Color("#123b91"), Color("#ffe15b"), 24, 4))
+    home_panel.add_child(play_card)
+
+    var mode_title := Label.new()
+    mode_title.position = Vector2(28, 24)
+    mode_title.size = Vector2(520, 50)
+    mode_title.text = "⚔  CONQUER THE ARENA"
+    mode_title.add_theme_font_size_override("font_size", 29)
+    mode_title.add_theme_color_override("font_color", Color("#fff7d1"))
+    play_card.add_child(mode_title)
+
+    var mode_note := Label.new()
+    mode_note.position = Vector2(30, 82)
+    mode_note.size = Vector2(525, 68)
+    mode_note.text = I18n.text_for("multiplayer_note")
+    mode_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    mode_note.add_theme_font_size_override("font_size", 17)
+    mode_note.add_theme_color_override("font_color", Color("#d8f5ff"))
+    play_card.add_child(mode_note)
+
+    var play := _home_button("▶   " + I18n.text_for("play_online"), Vector2(28, 180), Vector2(540, 82), Callable(self, "_play_online"))
+    play.add_theme_font_size_override("font_size", 27)
+    play.add_theme_stylebox_override("normal", _menu_style(Color("#ffe13d"), Color("#fff4a0"), 20, 3))
+    play.add_theme_stylebox_override("hover", _menu_style(Color("#fff078"), Color("#ffffff"), 20, 3))
+    play.add_theme_color_override("font_color", Color("#12316f"))
+    play.add_theme_color_override("font_hover_color", Color("#12316f"))
+
+    # Quick navigation on the right, large enough for touch.
+    var nav_title := Label.new()
+    nav_title.position = Vector2(690, 145)
+    nav_title.size = Vector2(440, 36)
+    nav_title.text = "YOUR WORLD"
+    nav_title.add_theme_font_size_override("font_size", 20)
+    nav_title.add_theme_color_override("font_color", Color("#9deeff"))
+    home_panel.add_child(nav_title)
+
+    _home_button("🛍  " + I18n.text_for("shop"), Vector2(690, 190), Vector2(235, 72), Callable(self, "_home_shop"))
+    _home_button("👤  " + I18n.text_for("profile"), Vector2(940, 190), Vector2(235, 72), Callable(self, "_home_profile"))
+    _home_button("🎭  " + I18n.text_for("skins"), Vector2(690, 278), Vector2(235, 72), Callable(self, "_home_skins"))
+    _home_button("🏆  " + I18n.text_for("leaderboard"), Vector2(940, 278), Vector2(235, 72), Callable(self, "_home_leaderboard"))
+    _home_button("📋  " + ("المهام اليومية" if I18n.is_arabic() else "DAILY MISSIONS"), Vector2(690, 366), Vector2(235, 72), Callable(self, "_home_season"))
+    _home_button("⚙  " + I18n.text_for("settings"), Vector2(940, 366), Vector2(235, 72), Callable(self, "_home_settings"))
+
+    # Season and player progress strip
+    var progress := Panel.new()
+    progress.position = Vector2(28, 462)
+    progress.size = Vector2(1147, 72)
+    progress.add_theme_stylebox_override("panel", _menu_style(Color(0.02, 0.07, 0.2, 0.78), Color("#287cc5"), 16, 2))
+    home_panel.add_child(progress)
+    var progress_label := Label.new()
+    progress_label.position = Vector2(20, 8)
+    progress_label.size = Vector2(1100, 56)
+    progress_label.text = "🌟  %s     •     %s     •     %s" % [Seasons.season_name(), ("مستوى الموسم %d" % Seasons.season_level) if I18n.is_arabic() else ("SEASON LEVEL %d" % Seasons.season_level), I18n.text_for("reward_note")]
+    progress_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    progress_label.add_theme_font_size_override("font_size", 16)
+    progress_label.add_theme_color_override("font_color", Color("#e8faff"))
+    progress.add_child(progress_label)
+
+    # Keep the original mascot visible above the translucent home surface.
+    if has_node("Mascot"):
+        $Mascot.position = Vector2(650, 385)
+        $Mascot.scale = Vector2(0.68, 0.68)
+        $Mascot.move_to_front()
+
+func _menu_style(fill:Color, border_color:Color, radius:int, border_width:int) -> StyleBoxFlat:
+    var style := StyleBoxFlat.new()
+    style.bg_color = fill
+    style.border_color = border_color
+    style.set_border_width_all(border_width)
+    style.set_corner_radius_all(radius)
+    style.content_margin_left = 14.0
+    style.content_margin_right = 14.0
+    style.content_margin_top = 8.0
+    style.content_margin_bottom = 8.0
+    return style
+
+func _stat_chip(text:String, pos:Vector2, size:Vector2, accent:Color) -> void:
+    var chip := Panel.new()
+    chip.position = pos
+    chip.size = size
+    chip.add_theme_stylebox_override("panel", _menu_style(Color(0.02, 0.10, 0.29, 0.94), accent, 16, 2))
+    home_panel.add_child(chip)
+    var label := Label.new()
+    label.position = Vector2(8, 4)
+    label.size = size - Vector2(16, 8)
+    label.text = text
+    label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    label.add_theme_font_size_override("font_size", 17)
+    label.add_theme_color_override("font_color", Color("#ffffff"))
+    chip.add_child(label)
+
+func _short_number(value:int) -> String:
+    if value >= 1000000: return "%.1fM" % (float(value) / 1000000.0)
+    if value >= 10000: return "%.1fK" % (float(value) / 1000.0)
+    return str(value)
 
 func _home_season() -> void:
     _http_get("/season", func(data):
@@ -164,17 +258,23 @@ func _home_season() -> void:
         _show_overlay(("الموسم والمهام اليومية" if I18n.is_arabic() else "Season & Daily Missions"), lines)
     )
 
-func _home_button(text:String, pos:Vector2, size:Vector2, callback:Callable) -> void:
+func _home_button(text:String, pos:Vector2, size:Vector2, callback:Callable) -> Button:
     var b := Button.new()
     b.text = text
     b.position = pos
     b.size = size
     b.add_theme_font_size_override("font_size", 19)
+    b.add_theme_color_override("font_color", Color("#ffffff"))
+    b.add_theme_color_override("font_hover_color", Color("#ffffff"))
+    b.add_theme_stylebox_override("normal", _menu_style(Color("#1554a8"), Color("#48dfff"), 16, 2))
+    b.add_theme_stylebox_override("hover", _menu_style(Color("#1c78cb"), Color("#fff07a"), 16, 3))
+    b.add_theme_stylebox_override("pressed", _menu_style(Color("#103875"), Color("#ffffff"), 16, 2))
     b.pressed.connect(callback)
     b.mouse_entered.connect(func(): _button_hover(b, true))
     b.mouse_exited.connect(func(): _button_hover(b, false))
     home_panel.add_child(b)
     home_buttons.append(b)
+    return b
 
 func _button_hover(button:Button, inside:bool) -> void:
     var tween := create_tween()
