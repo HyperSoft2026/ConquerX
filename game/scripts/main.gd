@@ -3,7 +3,7 @@ extends Node2D
 const SERVER_URL := "https://app-4729a9fe-87fc-4f1b-9248-112725e0db57.cleverapps.io"
 const LOGIN_TIMEOUT_SECONDS := 600.0
 const LOGIN_POLL_SECONDS := 2.0
-const GAME_SCENE := preload("res://scenes/game.tscn")
+const GAME_SCENE := preload("res://game/scenes/game.tscn")
 
 @onready var status_value: Label = $StatusPanel/StatusValue
 @onready var continue_button: Button = $ContinueButton
