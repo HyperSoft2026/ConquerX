@@ -83,9 +83,9 @@ func _ready() -> void:
     profile_panel.visible = false
     leaderboard_panel.visible = false
     skins_panel.visible = false
-    status_label.text = "Finding a match..."
+    status_label.text = I18n.text_for("finding")
     if session_token.is_empty():
-        status_label.text = "Session missing"
+        status_label.text = I18n.text_for("session_missing")
         return
     _connect_game()
 
@@ -117,14 +117,14 @@ func _update_live_leaderboard() -> void:
         var player:Dictionary = players[key]
         ranked.append({"id":int(key), "name":str(player.get("username", "Player")), "territory":int(player.get("territory", 0))})
     ranked.sort_custom(func(a, b): return int(a["territory"]) > int(b["territory"]))
-    var output := "TOP PLAYERS\n"
+    var output := I18n.text_for("top_players") + "\n"
     var my_rank := 0
     for i in range(ranked.size()):
         if int(ranked[i]["id"]) == self_id:
             my_rank = i + 1
         if i < 5:
             output += "%d. %s  %d\n" % [i + 1, str(ranked[i]["name"]).left(12), int(ranked[i]["territory"])]
-    output += "YOUR RANK  #%d" % my_rank if my_rank > 0 else "YOUR RANK  —"
+    output += "%s  #%d" % [I18n.text_for("your_rank"), my_rank] if my_rank > 0 else "%s  —" % I18n.text_for("your_rank")
     live_board_label.text = output
 
 func _add_panel_close_buttons() -> void:
@@ -233,7 +233,7 @@ func _process(delta: float) -> void:
 func _connect_game() -> void:
     var result := socket.connect_to_url(WS_URL + session_token.uri_encode())
     if result != OK:
-        status_label.text = "Connection failed"
+        status_label.text = I18n.text_for("connection_failed")
         return
     socket_started = true
 
@@ -249,10 +249,10 @@ func _handle_message(text: String) -> void:
     var t := str(data.get("type", ""))
     if t == "matchmaking":
         match_status = "waiting"
-        status_label.text = "Finding players • %s/%s" % [str(data.get("players",1)),str(data.get("max_players",20))]
+        status_label.text = "%s • %s/%s" % [I18n.text_for("finding"), str(data.get("players",1)), str(data.get("max_players",20))]
     elif t == "match_found":
         match_status = "playing"
-        status_label.text = "MATCH FOUND • FIGHT!"
+        status_label.text = I18n.text_for("match_found")
         _sound(600.0,0.10)
     elif t == "state":
         _apply_state(data)
@@ -267,7 +267,7 @@ func _handle_message(text: String) -> void:
     elif t == "death":
         dead = true
         input_vector = Vector2.ZERO
-        death_label.text = "ELIMINATED\nDefeated by %s\nRespawning..." % str(data.get("killer","another player"))
+        death_label.text = "%s\n%s: %s\n%s" % [I18n.text_for("eliminated"), ("المتسبب" if I18n.is_arabic() else "Defeated by"), str(data.get("killer","another player")), I18n.text_for("respawning")]
         death_panel.visible = true
         _sound(150.0,0.18)
     elif t == "respawned":
@@ -411,7 +411,7 @@ func _profile_loaded(data:Dictionary) -> void:
 func _load_leaderboard() -> void:
     _http_get("/leaderboard?sort=gold&limit=500",Callable(self,"_leaderboard_loaded"))
 func _leaderboard_loaded(data:Dictionary) -> void:
-    var text := "TOP 500 • GOLD\n\n"
+    var text := I18n.text_for("top500") + "\n\n"
     for row in data.get("leaderboard",[]):
         text += "%3d. %-20s G:%-6s W:%-3s L:%-3s\n" % [int(row.get("rank",0)),str(row.get("username","Player")).left(20),str(row.get("gold",0)),str(row.get("wins",0)),str(row.get("level",1))]
     leaderboard_text.text=text
