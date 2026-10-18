@@ -154,8 +154,9 @@ func _sync_season() -> void:
     )
 
 func _show_home() -> void:
-    $Title.text = "ConquerX"
-    $Subtitle.text = "%s • %s" % [I18n.text_for("welcome"), str(account.get("username", "Player"))]
+    $Title.visible = false
+    $Subtitle.visible = false
+    $Version.visible = false
     $StatusPanel.visible = false
     $DiscordLoginButton.visible = false
     $ContinueButton.visible = false
