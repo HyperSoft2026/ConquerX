@@ -6,6 +6,10 @@ config/name="ConquerX"
 run/main_scene="res://game/scenes/splash.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://assets/icon/Logo_ConquerX.png"
+boot_splash/image="res://assets/ConquerX_BootSplash.svg"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
+boot_splash/bg_color=Color("#07152e")
 
 [autoload]
 I18n="*res://game/scripts/i18n.gd"
