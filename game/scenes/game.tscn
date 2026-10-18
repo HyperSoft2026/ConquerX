@@ -13,39 +13,67 @@ position_smoothing_speed = 8.0
 [node name="HUD" type="CanvasLayer" parent="."]
 
 [node name="TopBar" type="Panel" parent="HUD"]
-offset_left = 22.0
-offset_top = 18.0
-offset_right = 1258.0
-offset_bottom = 82.0
+offset_left = 18.0
+offset_top = 14.0
+offset_right = 1262.0
+offset_bottom = 78.0
 
 [node name="Player" type="Label" parent="HUD/TopBar"]
-offset_left = 22.0
+offset_left = 18.0
 offset_top = 12.0
-offset_right = 360.0
+offset_right = 300.0
 offset_bottom = 52.0
-theme_override_colors/font_color = Color(0.92, 0.96, 1, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 21
 text = "Player"
 
 [node name="Status" type="Label" parent="HUD/TopBar"]
-offset_left = 390.0
+offset_left = 300.0
 offset_top = 14.0
-offset_right = 820.0
+offset_right = 690.0
 offset_bottom = 50.0
 theme_override_colors/font_color = Color(0.42, 0.9, 0.64, 1)
-theme_override_font_sizes/font_size = 19
+theme_override_font_sizes/font_size = 18
 text = "Connecting..."
 horizontal_alignment = 1
 
 [node name="Territory" type="Label" parent="HUD/TopBar"]
-offset_left = 900.0
+offset_left = 700.0
 offset_top = 12.0
-offset_right = 1200.0
+offset_right = 870.0
 offset_bottom = 52.0
 theme_override_colors/font_color = Color(0.48, 0.72, 1, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 20
 text = "Territory  0"
-horizontal_alignment = 2
+
+[node name="Kills" type="Label" parent="HUD/TopBar"]
+offset_left = 875.0
+offset_top = 12.0
+offset_right = 965.0
+offset_bottom = 52.0
+theme_override_colors/font_color = Color(1, 0.48, 0.42, 1)
+theme_override_font_sizes/font_size = 20
+text = "⚔ 0"
+
+[node name="ProfileButton" type="Button" parent="HUD/TopBar"]
+offset_left = 975.0
+offset_top = 8.0
+offset_right = 1060.0
+offset_bottom = 56.0
+text = "Profile"
+
+[node name="LeaderboardButton" type="Button" parent="HUD/TopBar"]
+offset_left = 1068.0
+offset_top = 8.0
+offset_right = 1150.0
+offset_bottom = 56.0
+text = "Top 500"
+
+[node name="SkinsButton" type="Button" parent="HUD/TopBar"]
+offset_left = 1158.0
+offset_top = 8.0
+offset_right = 1238.0
+offset_bottom = 56.0
+text = "Skins"
 
 [node name="JoystickHint" type="Label" parent="HUD"]
 offset_left = 34.0
@@ -56,12 +84,72 @@ theme_override_colors/font_color = Color(0.7, 0.76, 0.86, 0.9)
 theme_override_font_sizes/font_size = 16
 text = "Touch & drag to move"
 
-[node name="ControlsHint" type="Label" parent="HUD"]
-offset_left = 870.0
-offset_top = 650.0
-offset_right = 1245.0
-offset_bottom = 690.0
-theme_override_colors/font_color = Color(0.7, 0.76, 0.86, 0.9)
-theme_override_font_sizes/font_size = 16
-text = "WASD / Mouse supported on PC"
-horizontal_alignment = 2
+[node name="DeathPanel" type="Panel" parent="HUD"]
+offset_left = 410.0
+offset_top = 230.0
+offset_right = 870.0
+offset_bottom = 490.0
+
+[node name="DeathLabel" type="Label" parent="HUD/DeathPanel"]
+offset_left = 20.0
+offset_top = 55.0
+offset_right = 440.0
+offset_bottom = 210.0
+theme_override_font_sizes/font_size = 28
+text = "ELIMINATED"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ProfilePanel" type="Panel" parent="HUD"]
+offset_left = 350.0
+offset_top = 105.0
+offset_right = 930.0
+offset_bottom = 620.0
+
+[node name="ProfileText" type="Label" parent="HUD/ProfilePanel"]
+offset_left = 35.0
+offset_top = 30.0
+offset_right = 545.0
+offset_bottom = 470.0
+theme_override_font_sizes/font_size = 21
+text = "PROFILE"
+
+[node name="LeaderboardPanel" type="Panel" parent="HUD"]
+offset_left = 240.0
+offset_top = 90.0
+offset_right = 1040.0
+offset_bottom = 670.0
+
+[node name="LeaderboardText" type="Label" parent="HUD/LeaderboardPanel"]
+offset_left = 25.0
+offset_top = 22.0
+offset_right = 775.0
+offset_bottom = 555.0
+theme_override_font_sizes/font_size = 14
+text = "TOP 500 • Loading..."
+
+[node name="SkinsPanel" type="Panel" parent="HUD"]
+offset_left = 160.0
+offset_top = 90.0
+offset_right = 1120.0
+offset_bottom = 680.0
+
+[node name="Title" type="Label" parent="HUD/SkinsPanel"]
+offset_left = 25.0
+offset_top = 18.0
+offset_right = 900.0
+offset_bottom = 55.0
+theme_override_font_sizes/font_size = 24
+text = "50 SKINS"
+
+[node name="Scroll" type="ScrollContainer" parent="HUD/SkinsPanel"]
+offset_left = 20.0
+offset_top = 65.0
+offset_right = 940.0
+offset_bottom = 565.0
+
+[node name="SkinsGrid" type="GridContainer" parent="HUD/SkinsPanel/Scroll"]
+offset_right = 900.0
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+columns = 5
