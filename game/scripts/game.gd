@@ -159,7 +159,7 @@ func _add_header_buttons() -> void:
     pause.pressed.connect(_show_pause_menu)
     $HUD/TopBar.add_child(pause)
     var board := Button.new()
-    board.text = "🏆"
+    board.text = "TOP"
     board.tooltip_text = "Leaderboard"
     board.position = Vector2(1148, 6)
     board.size = Vector2(70, 50)
@@ -275,7 +275,7 @@ func _handle_message(text: String) -> void:
         death_panel.visible = false
         _sound(420.0,0.08)
     elif t == "kill" and int(data.get("killer_id",-1)) == self_id:
-        status_label.text = "⚔ KILL • %s" % str(data.get("victim","Player"))
+        status_label.text = "%s • %s" % [I18n.text_for("kill"), str(data.get("victim","Player"))]
         _sound(720.0,0.10)
     elif t == "match_end":
         match_status = "finished"
@@ -317,11 +317,11 @@ func _apply_players(items:Array, _move_camera:bool) -> void:
 func _update_ui() -> void:
     if players.has(self_id):
         var me:Dictionary = players[self_id]
-        territory_label.text = "Territory %s" % str(me.get("territory",0))
-        kills_label.text = "⚔ %s" % str(me.get("kills",0))
+        territory_label.text = "%s %s" % [I18n.text_for("territory"), str(me.get("territory",0))]
+        kills_label.text = "%s %s" % [I18n.text_for("kills"), str(me.get("kills",0))]
     if match_status == "playing":
         var seconds: int = maxi(0, int(match_remaining_ms / 1000))
-        status_label.text = "LIVE • %02d:%02d" % [int(seconds/60),seconds%60]
+        status_label.text = "%s • %02d:%02d" % [I18n.text_for("live"), int(seconds/60), seconds%60]
 
 func _unhandled_key_input(event:InputEvent) -> void:
     if event is InputEventKey and event.pressed and not event.echo:
