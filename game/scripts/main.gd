@@ -39,7 +39,7 @@ func _restore_saved_session() -> void:
         return
     login_button.disabled = true
     continue_button.disabled = true
-    status_value.text = "جارٍ استعادة الجلسة..." if I18n.is_arabic() else "Restoring saved session..."
+    status_value.text = I18n.text_for("restoring_session")
     var request := HTTPRequest.new()
     add_child(request)
     request.request_completed.connect(_saved_session_checked.bind(request))
@@ -234,7 +234,7 @@ func _rebuild_home() -> void:
     var mode_title := Label.new()
     mode_title.position = Vector2(22, 22)
     mode_title.size = Vector2(330, 54)
-    mode_title.text = "⚔  " + ("ساحة المعركة" if I18n.is_arabic() else "CONQUER THE ARENA")
+    mode_title.text = "⚔  " + I18n.text_for("arena_title")
     mode_title.add_theme_font_size_override("font_size", 25)
     mode_title.add_theme_color_override("font_color", Color("#fff7d1"))
     play_card.add_child(mode_title)
@@ -257,7 +257,7 @@ func _rebuild_home() -> void:
     var nav_title := Label.new()
     nav_title.position = Vector2(850, 72)
     nav_title.size = Vector2(340, 38)
-    nav_title.text = "عالمك" if I18n.is_arabic() else "YOUR WORLD"
+    nav_title.text = I18n.text_for("world_nav")
     nav_title.add_theme_font_size_override("font_size", 21)
     nav_title.add_theme_color_override("font_color", Color("#9deeff"))
     home_panel.add_child(nav_title)
@@ -265,7 +265,7 @@ func _rebuild_home() -> void:
     _home_button("👤  " + I18n.text_for("profile"), Vector2(1025, 120), Vector2(165, 66), Callable(self, "_home_profile"))
     _home_button("🎭  " + I18n.text_for("skins"), Vector2(850, 198), Vector2(165, 66), Callable(self, "_home_skins"))
     _home_button("🏆  " + I18n.text_for("leaderboard"), Vector2(1025, 198), Vector2(165, 66), Callable(self, "_home_leaderboard"))
-    _home_button("📋  " + ("المهام اليومية" if I18n.is_arabic() else "DAILY MISSIONS"), Vector2(850, 276), Vector2(165, 66), Callable(self, "_home_season"))
+    _home_button("📋  " + I18n.text_for("daily_missions"), Vector2(850, 276), Vector2(165, 66), Callable(self, "_home_season"))
     _home_button("⚙  " + I18n.text_for("settings"), Vector2(1025, 276), Vector2(165, 66), Callable(self, "_home_settings"))
 
     var progress := Panel.new()
