@@ -24,7 +24,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-color = Color(0.025, 0.031, 0.055, 1)
+color = Color("#07152e")
 
 [node name="Glow" type="ColorRect" parent="."]
 layout_mode = 0
