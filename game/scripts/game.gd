@@ -42,6 +42,9 @@ var sfx_player: AudioStreamPlayer
 var music_playback: AudioStreamGeneratorPlayback
 var sfx_playback: AudioStreamGeneratorPlayback
 var music_phase := 0.0
+var camera_target := WORLD_SIZE * 0.5
+var reconnect_timer := 0.0
+var reconnect_delay := 1.0
 
 @onready var status_label: Label = $HUD/TopBar/Status
 @onready var player_label: Label = $HUD/TopBar/Player
@@ -56,14 +59,18 @@ var music_phase := 0.0
 @onready var skins_panel: Panel = $HUD/SkinsPanel
 
 func _ready() -> void:
-    $HUD/TopBar/ProfileButton.pressed.connect(_on_profile_pressed)
-    $HUD/TopBar/LeaderboardButton.pressed.connect(_on_leaderboard_pressed)
-    $HUD/TopBar/SkinsButton.pressed.connect(_on_skins_pressed)
+    $HUD/TopBar/ProfileButton.visible = false
+    $HUD/TopBar/LeaderboardButton.visible = false
+    $HUD/TopBar/SkinsButton.visible = false
+    $HUD/JoystickHint.visible = false
+    $HUD/VirtualJoystick.vector_changed.connect(_on_joystick_vector_changed)
     session_token = str(get_meta("session_token", ""))
     account = get_meta("account", {})
     _setup_audio()
     _add_header_buttons()
-    $Camera2D.position = world_size * 0.5
+    camera_target = world_size * 0.5
+    $Camera2D.position_smoothing_enabled = false
+    $Camera2D.position = camera_target
     $Camera2D.limit_left = 0
     $Camera2D.limit_top = 0
     $Camera2D.limit_right = int(world_size.x)
@@ -80,24 +87,30 @@ func _ready() -> void:
     _connect_game()
 
 func _add_header_buttons() -> void:
-    $HUD/TopBar/ProfileButton.position = Vector2(790,8)
-    $HUD/TopBar/ProfileButton.size = Vector2(82,48)
-    $HUD/TopBar/LeaderboardButton.position = Vector2(878,8)
-    $HUD/TopBar/LeaderboardButton.size = Vector2(88,48)
-    $HUD/TopBar/SkinsButton.position = Vector2(972,8)
-    $HUD/TopBar/SkinsButton.size = Vector2(82,48)
-    var shop := Button.new()
-    shop.text = "Shop"
-    shop.position = Vector2(1062,8)
-    shop.size = Vector2(70,48)
-    shop.pressed.connect(_on_shop_pressed)
-    $HUD/TopBar.add_child(shop)
-    var settings := Button.new()
-    settings.text = "⚙"
-    settings.position = Vector2(1138,8)
-    settings.size = Vector2(52,48)
-    settings.pressed.connect(_on_settings_pressed)
-    $HUD/TopBar.add_child(settings)
+    $HUD/TopBar/Player.position = Vector2(18, 8)
+    $HUD/TopBar/Player.size = Vector2(205, 48)
+    $HUD/TopBar/Status.position = Vector2(225, 8)
+    $HUD/TopBar/Status.size = Vector2(340, 48)
+    $HUD/TopBar/Territory.position = Vector2(575, 8)
+    $HUD/TopBar/Territory.size = Vector2(175, 48)
+    $HUD/TopBar/Kills.position = Vector2(755, 8)
+    $HUD/TopBar/Kills.size = Vector2(95, 48)
+    var pause := Button.new()
+    pause.text = "Ⅱ"
+    pause.tooltip_text = "Menu"
+    pause.position = Vector2(1080, 6)
+    pause.size = Vector2(60, 50)
+    pause.focus_mode = Control.FOCUS_NONE
+    pause.pressed.connect(_show_pause_menu)
+    $HUD/TopBar.add_child(pause)
+    var board := Button.new()
+    board.text = "🏆"
+    board.tooltip_text = "Leaderboard"
+    board.position = Vector2(1148, 6)
+    board.size = Vector2(70, 50)
+    board.focus_mode = Control.FOCUS_NONE
+    board.pressed.connect(_on_leaderboard_pressed)
+    $HUD/TopBar.add_child(board)
 
 func _setup_audio() -> void:
     music_player = AudioStreamPlayer.new()
@@ -122,27 +135,44 @@ func _process(delta: float) -> void:
         for i in range(frames):
             var v := sin(music_phase) * 0.018
             music_phase += TAU * 110.0 / 22050.0
-            music_playback.push_frame(Vector2(v,v))
+            music_playback.push_frame(Vector2(v, v))
+
+    # Smoothly track the local player on every frame, clamped to world bounds.
+    var camera := $Camera2D
+    var view_size := get_viewport_rect().size / camera.zoom
+    var half := view_size * 0.5
+    var min_x := min(half.x, world_size.x * 0.5)
+    var max_x := max(min_x, world_size.x - half.x)
+    var min_y := min(half.y, world_size.y * 0.5)
+    var max_y := max(min_y, world_size.y - half.y)
+    camera_target.x = clamp(camera_target.x, min_x, max_x)
+    camera_target.y = clamp(camera_target.y, min_y, max_y)
+    camera.position = camera.position.lerp(camera_target, 1.0 - exp(-delta * 8.5))
+
     if socket_started:
         socket.poll()
         if socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
             if not connected:
                 connected = true
-                status_label.text = "Matchmaking connected"
+                reconnect_delay = 1.0
+                status_label.text = I18n.text_for("match_connected")
             input_timer += delta
             if input_timer >= INPUT_INTERVAL:
                 input_timer = 0.0
                 _send_input()
             while socket.get_available_packet_count() > 0:
                 _handle_message(socket.get_packet().get_string_from_utf8())
-        elif socket.get_ready_state() == WebSocketPeer.STATE_CLOSED and connected:
-            connected = false
+        elif socket.get_ready_state() == WebSocketPeer.STATE_CLOSED:
             socket_started = false
-            status_label.text = "Disconnected • reconnecting..."
-            await get_tree().create_timer(2.0).timeout
-            if is_inside_tree():
-                socket = WebSocketPeer.new()
-                _connect_game()
+            connected = false
+            reconnect_timer = reconnect_delay
+            reconnect_delay = min(reconnect_delay * 2.0, 16.0)
+            status_label.text = I18n.text_for("reconnecting")
+    elif not session_token.is_empty():
+        reconnect_timer -= delta
+        if reconnect_timer <= 0.0:
+            socket = WebSocketPeer.new()
+            _connect_game()
     queue_redraw()
 
 func _connect_game() -> void:
@@ -211,19 +241,19 @@ func _apply_state(data: Dictionary) -> void:
     territory = data.get("territory",[])
     _apply_players(data.get("players",[]),true)
 
-func _apply_players(items:Array, move_camera:bool) -> void:
+func _apply_players(items:Array, _move_camera:bool) -> void:
     var next:Dictionary = {}
     for item in items:
         if typeof(item) == TYPE_DICTIONARY:
-            var id := int(item.get("id",0))
+            var id := int(item.get("id", 0))
             if id > 0:
                 next[id] = item
     players = next
     if players.has(self_id):
         var me:Dictionary = players[self_id]
-        dead = bool(me.get("dead",false))
-        if move_camera and not dead:
-            $Camera2D.position = Vector2(float(me.get("x",world_size.x/2)),float(me.get("y",world_size.y/2)))
+        dead = bool(me.get("dead", false))
+        if not dead:
+            camera_target = Vector2(float(me.get("x", world_size.x * 0.5)), float(me.get("y", world_size.y * 0.5)))
 
 func _update_ui() -> void:
     if players.has(self_id):
@@ -234,42 +264,8 @@ func _update_ui() -> void:
         var seconds: int = maxi(0, int(match_remaining_ms / 1000))
         status_label.text = "LIVE • %02d:%02d" % [int(seconds/60),seconds%60]
 
-func _unhandled_input(event:InputEvent) -> void:
-    if event is InputEventScreenTouch:
-        if event.pressed and event.position.x < get_viewport_rect().size.x*0.55 and joystick_touch_id == -1 and not _ui_open():
-            joystick_touch_id = event.index
-            joystick_active = true
-            joystick_center = event.position
-            joystick_knob = event.position
-            _update_joystick(event.position)
-        elif not event.pressed and event.index == joystick_touch_id:
-            _release_joystick()
-    elif event is InputEventScreenDrag and event.index == joystick_touch_id:
-        _update_joystick(event.position)
-    elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-        if event.pressed and event.position.x < get_viewport_rect().size.x*0.55 and not _ui_open():
-            joystick_touch_id = -2
-            joystick_active = true
-            joystick_center = event.position
-            joystick_knob = event.position
-            _update_joystick(event.position)
-        elif not event.pressed and joystick_touch_id == -2:
-            _release_joystick()
-    elif event is InputEventMouseMotion and joystick_touch_id == -2 and joystick_active:
-        _update_joystick(event.position)
-
-func _update_joystick(pos:Vector2) -> void:
-    var offset := pos - joystick_center
-    if offset.length() > joystick_radius:
-        offset = offset.normalized() * joystick_radius
-    joystick_knob = joystick_center + offset
-    input_vector = offset / joystick_radius
-
-func _release_joystick() -> void:
-    joystick_touch_id = -1
-    joystick_active = false
-    joystick_knob = joystick_center
-    input_vector = Vector2.ZERO
+func _on_joystick_vector_changed(value:Vector2) -> void:
+    input_vector = Vector2.ZERO if _ui_open() else value
 
 func _ui_open() -> bool:
     return profile_open or leaderboard_open or skins_open or shop_open or settings_open or dynamic_panel != null or dead
@@ -293,13 +289,14 @@ func _draw() -> void:
         var pos := Vector2(float(p.get("x",0)),float(p.get("y",0)))
         var mine := int(id) == self_id
         var pulse := sin(Time.get_ticks_msec()*0.006)*2.0 if mine else 0.0
-        draw_circle(pos,(24.0+pulse) if mine else 18.0,_player_color(int(id),1.0))
-        draw_circle(pos,8.0,Color(0.95,0.98,1,1))
-        draw_string(ThemeDB.fallback_font,pos+Vector2(-55,-32),str(p.get("username","Player")),HORIZONTAL_ALIGNMENT_CENTER,110,16,Color(0.9,0.94,1,1))
-    if joystick_active and not _ui_open():
-        draw_circle(joystick_center,joystick_radius,Color(0.05,0.08,0.14,0.82))
-        draw_circle(joystick_center,joystick_radius,Color(0.35,0.65,1,0.35),false,4.0)
-        draw_circle(joystick_knob,34.0,Color(0.35,0.65,1,0.9))
+        draw_circle(pos, 29.0 if mine else 22.0, _player_color(int(id), 0.18))
+        draw_circle(pos, (23.0+pulse) if mine else 18.0, _player_color(int(id),1.0))
+        draw_circle(pos + Vector2(-6,-2), 5.0, Color(0.95,0.98,1,1))
+        draw_circle(pos + Vector2(6,-2), 5.0, Color(0.95,0.98,1,1))
+        draw_circle(pos + Vector2(-6,-2), 2.5, Color(0.05,0.12,0.3,1))
+        draw_circle(pos + Vector2(6,-2), 2.5, Color(0.05,0.12,0.3,1))
+        draw_string(ThemeDB.fallback_font,pos+Vector2(-70,-35),str(p.get("username","Player")),HORIZONTAL_ALIGNMENT_CENTER,140,16,Color(0.9,0.94,1,1))
+
 
 func _player_color(id:int,alpha:float)->Color:
     var skin_id := 1
@@ -313,6 +310,17 @@ func _close_existing() -> void:
     if dynamic_panel != null:
         dynamic_panel.queue_free()
         dynamic_panel=null
+
+func _show_pause_menu() -> void:
+    _close_existing()
+    var panel := _new_panel("MENU", Vector2(340, 110), Vector2(600, 500))
+    var w := 250.0
+    _button(panel, I18n.text_for("profile"), Vector2(28, 82), Vector2(w, 62), Callable(self, "_on_profile_pressed"))
+    _button(panel, I18n.text_for("shop"), Vector2(320, 82), Vector2(w, 62), Callable(self, "_on_shop_pressed"))
+    _button(panel, I18n.text_for("skins"), Vector2(28, 160), Vector2(w, 62), Callable(self, "_on_skins_pressed"))
+    _button(panel, I18n.text_for("leaderboard"), Vector2(320, 160), Vector2(w, 62), Callable(self, "_on_leaderboard_pressed"))
+    _button(panel, I18n.text_for("settings"), Vector2(28, 238), Vector2(w, 62), Callable(self, "_on_settings_pressed"))
+    _button(panel, I18n.text_for("close"), Vector2(320, 238), Vector2(w, 62), Callable(self, "_close_existing"))
 
 func _on_profile_pressed() -> void:
     _close_existing();profile_open=true;profile_panel.visible=true;_load_profile()
