@@ -48,4 +48,4 @@ func _finish_with_offline(request: HTTPRequest) -> void:
     _open_login()
 
 func _open_login() -> void:
-    get_tree().change_scene_to_file("res://game/scenes/login.tscn")
+    get_tree().change_scene_to_file("res://game/scenes/main.tscn")
