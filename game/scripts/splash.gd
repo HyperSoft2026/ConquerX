@@ -13,12 +13,13 @@ func _ready() -> void:
 
 func _start_splash() -> void:
     var tween := create_tween()
-    tween.tween_property(progress, "value", 70.0, 1.4)
+    tween.tween_property(progress, "value", 70.0, 0.25)
     tween.tween_callback(_check_server)
 
 func _check_server() -> void:
     status_label.text = I18n.text_for("connecting")
     var request := HTTPRequest.new()
+    request.timeout = 3.0
     add_child(request)
     request.request_completed.connect(_on_health_completed.bind(request))
     var error := request.request(SERVER_URL.rstrip("/") + "/health")
@@ -33,12 +34,11 @@ func _on_health_completed(result: int, response_code: int, _headers: PackedStrin
     else:
         status_label.text = I18n.text_for("server_unavailable")
         progress.value = 100.0
-    await get_tree().create_timer(0.7).timeout
     _open_login()
 
 func _finish_with_offline(request: HTTPRequest) -> void:
     request.queue_free()
-    status_label.text = "Server unavailable — continuing offline"
+    status_label.text = I18n.text_for("server_unavailable")
     progress.value = 100.0
     await get_tree().create_timer(0.7).timeout
     _open_login()
@@ -50,11 +50,9 @@ func _layout_splash() -> void:
     var viewport_size := get_viewport_rect().size
     var center := viewport_size * 0.5
     $Glow.visible = false
-    $Logo.position = center + Vector2(-120, -205)
-    $Logo.size = Vector2(240, 240)
-    $Title.position = center + Vector2(-250, 48)
-    $Title.size = Vector2(500, 58)
-    $Status.position = center + Vector2(-360, 112)
-    $Status.size = Vector2(720, 36)
-    $Progress.position = center + Vector2(-220, 166)
-    $Progress.size = Vector2(440, 14)
+    $Logo.visible = false
+    $Title.visible = false
+    $Status.position = Vector2(0, viewport_size.y - 92)
+    $Status.size = Vector2(viewport_size.x, 30)
+    $Progress.position = Vector2(viewport_size.x * 0.25, viewport_size.y - 48)
+    $Progress.size = Vector2(viewport_size.x * 0.5, 12)
