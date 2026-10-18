@@ -1,0 +1,23 @@
+; ConquerX Godot 4 project
+config_version=5
+
+[application]
+config/name="ConquerX"
+run/main_scene="res://game/scenes/splash.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+config/icon="res://assets/icon/Logo_ConquerX.png"
+
+[display]
+
+[display/window]
+size/viewport_width=1280
+size/viewport_height=720
+size/window_width_override=1280
+size/window_height_override=720
+stretch/mode="canvas_items"
+handheld/orientation=1
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.035, 0.043, 0.07, 1)
