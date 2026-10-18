@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource path="res://scripts/game.gd" type="Script" id="1"]
 [ext_resource path="res://scripts/visual_effects.gd" type="Script" id="2"]
 [ext_resource path="res://scripts/language_controller.gd" type="Script" id="3"]
+[ext_resource path="res://scripts/ui_polish.gd" type="Script" id="4"]
 
 [node name="ConquerXGame" type="Node2D"]
 script = ExtResource("1")
@@ -12,6 +13,9 @@ script = ExtResource("2")
 
 [node name="LanguageController" type="Node" parent="."]
 script = ExtResource("3")
+
+[node name="UIPolish" type="Node" parent="."]
+script = ExtResource("4")
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(2000, 1200)
