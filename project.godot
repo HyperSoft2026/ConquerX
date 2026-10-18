@@ -9,6 +9,8 @@ config/icon="res://assets/icon/Logo_ConquerX.png"
 
 [autoload]
 I18n="*res://game/scripts/i18n.gd"
+Performance="*res://game/scripts/performance.gd"
+Seasons="*res://game/scripts/seasons.gd"
 
 [display]
 
@@ -24,3 +26,6 @@ handheld/orientation=1
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 environment/defaults/default_clear_color=Color(0.035, 0.043, 0.07, 1)
+
+[gui]
+theme/default_font_multichannel_signed_distance_field=true
