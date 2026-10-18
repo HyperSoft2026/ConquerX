@@ -141,17 +141,6 @@ async function waitForCoreTables() {
 
 require('./server.js');
 
-(async () => {
-  try {
-    await waitForCoreTables();
-    await setupSeasonDatabase();
-    console.log('ConquerX server-authoritative season system ready');
-  } catch (error) {
-    console.error('Season database initialization failed:', error);
-    process.exit(1);
-  }
-})();
-
 const gateway = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -183,4 +172,14 @@ gateway.on('upgrade', (req, socket, head) => {
   upstream.on('error', () => socket.destroy());
 });
 
-gateway.listen(PUBLIC_PORT, () => console.log(`ConquerX gateway listening on port ${PUBLIC_PORT}`));
+(async () => {
+  try {
+    await waitForCoreTables();
+    await setupSeasonDatabase();
+    console.log('ConquerX server-authoritative season system ready');
+    gateway.listen(PUBLIC_PORT, () => console.log(`ConquerX gateway listening on port ${PUBLIC_PORT}`));
+  } catch (error) {
+    console.error('ConquerX gateway initialization failed:', error);
+    process.exit(1);
+  }
+})();
