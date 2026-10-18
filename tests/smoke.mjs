@@ -8,32 +8,34 @@ const main = await readFile('game/scripts/main.gd', 'utf8');
 const seasons = await readFile('game/scripts/seasons.gd', 'utf8');
 const tracker = await readFile('game/scripts/match_tracker.gd', 'utf8');
 
+const source = server + '\n' + boot + '\n' + game + '\n' + main + '\n' + seasons + '\n' + tracker;
+
 const checks = [
   ['WebSocket server', /WebSocketServer/],
-  ['matchmaking queue', /const queue = \[\]/],
-  ['20-player rooms', /MAX_PLAYERS_PER_MATCH = 20/],
-  ['3-minute matches', /MATCH_DURATION_MS = 180000/],
-  ['match completion', /function finishMatch/],
+  ['matchmaking queue', /const\s+queue\s*=\s*\[\]/],
+  ['20-player rooms', /MAX_PLAYERS_PER_MATCH\s*=\s*20/],
+  ['3-minute matches', /MATCH_DURATION_MS\s*=\s*180000/],
+  ['match completion', /function\s+finishMatch/],
   ['Gold/Gems shop route', /\/shop\/buy/],
-  ['50 skins', /Array\.from\(\{length:50\}/],
+  ['50 skins', /Array\.from\(\{length:\s*50\}/],
   ['leaderboard route', /\/leaderboard/],
   ['profile route', /\/profile/],
   ['game WebSocket client', /WebSocketPeer/],
-  ['game matchmaking handling', /t === "matchmaking"/],
+  ['game matchmaking handling', /t\s*===\s*"matchmaking"/],
   ['match end UI', /_show_match_end/],
   ['shop UI', /_show_shop/],
   ['settings UI', /_show_settings/],
   ['home page', /_show_home/],
-  ['Discord login', /discord/],
+  ['Discord login', /discord/i],
   ['season database', /season_progress/],
   ['daily challenge database', /daily_challenges/],
   ['server season trigger', /conquerx_apply_match_challenges/],
-  ['authenticated season endpoint', /url\.pathname === '\/season'/],
+  ['authenticated season endpoint', /url\.pathname\s*===\s*'\/season'/],
   ['no client reward persistence', /server-authoritative/]
 ];
 
 for (const [name, pattern] of checks) {
-  if (!pattern.test(server + '\n' + boot + '\n' + game + '\n' + main + '\n' + seasons + '\n' + tracker)) {
+  if (!pattern.test(source)) {
     throw new Error(`Smoke check failed: ${name}`);
   }
 }
