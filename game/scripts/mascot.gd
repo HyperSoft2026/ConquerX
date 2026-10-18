@@ -10,7 +10,11 @@ func _process(delta: float) -> void:
 func _draw() -> void:
     var bob := sin(bob_time * 1.7) * 7.0
     # Shadow
-    draw_ellipse(Vector2(0, 108), Vector2(94, 18), Color(0.02, 0.16, 0.38, 0.24))
+    var shadow_points := PackedVector2Array()
+    for i in range(24):
+        var angle := TAU * float(i) / 24.0
+        shadow_points.append(Vector2(cos(angle) * 94.0, 108.0 + sin(angle) * 18.0))
+    draw_colored_polygon(shadow_points, Color(0.02, 0.16, 0.38, 0.24))
     # Back fins / ears
     draw_colored_polygon(PackedVector2Array([Vector2(-48, -50+bob), Vector2(-80, -88+bob), Vector2(-73, -25+bob), Vector2(-45, -15+bob)]), Color("#ff9d22"))
     draw_colored_polygon(PackedVector2Array([Vector2(48, -50+bob), Vector2(80, -88+bob), Vector2(73, -25+bob), Vector2(45, -15+bob)]), Color("#ff9d22"))
