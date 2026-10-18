@@ -1,12 +1,14 @@
 {
   "name": "conquerx-server",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "ConquerX multiplayer game backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node tests/smoke.mjs",
+    "check": "node --check server.js && node tests/smoke.mjs"
   },
   "engines": {
     "node": ">=20"
