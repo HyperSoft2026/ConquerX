@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<defs>
+ <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#073b88"/><stop offset=".52" stop-color="#087ed1"/><stop offset="1" stop-color="#25d8e6"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#55edff" stop-opacity=".5"/><stop offset="1" stop-color="#55edff" stop-opacity="0"/></radialGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff06a"/><stop offset="1" stop-color="#ff9f1c"/></linearGradient>
+ <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff785c"/><stop offset="1" stop-color="#db254f"/></linearGradient>
+ <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#46e9ff"/><stop offset="1" stop-color="#2461ef"/></linearGradient>
+ <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%"><feGaussianBlur in="SourceAlpha" stdDeviation="12"/><feOffset dy="12"/><feComponentTransfer><feFuncA type="linear" slope=".38"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#b9faff" stroke-opacity=".11" stroke-width="2"/></pattern>
+</defs>
+<rect width="1280" height="720" fill="url(#sky)"/>
+<rect width="1280" height="720" fill="url(#grid)"/>
+<circle cx="895" cy="340" r="360" fill="url(#halo)"/>
+<g fill="#d9ffff" opacity=".65"><circle cx="93" cy="122" r="4"/><circle cx="180" cy="220" r="3"/><circle cx="1090" cy="116" r="5"/><circle cx="1164" cy="450" r="4"/><circle cx="760" cy="92" r="3"/><circle cx="440" cy="615" r="4"/></g>
+<g opacity=".9" filter="url(#shadow)">
+ <path d="M730 190l65-37 64 25 32 57-18 55 28 46-29 68-64 25-64-22-38-51 12-56-19-50z" fill="#49d27d" stroke="#c4ff9b" stroke-width="5"/>
+ <path d="M918 390l47-39 65 12 31 46-19 53-61 25-49-25-21-36z" fill="#a66bff" stroke="#e0c4ff" stroke-width="5"/>
+ <path d="M240 430l46-58 74 5 45 49-11 66-61 40-64-17-35-39z" fill="#ffbf36" stroke="#fff0a0" stroke-width="5"/>
+ <path d="M344 177l51-36 64 14 34 55-17 57-62 23-55-29-22-44z" fill="#f65368" stroke="#ffb5ad" stroke-width="5"/>
+</g>
+<g transform="translate(642 360)" filter="url(#shadow)">
+ <ellipse cx="0" cy="174" rx="200" ry="32" fill="#032d65" opacity=".35"/>
+ <path d="M-156 74l-48-44 8-61 45-41 51-28 100-9 81 24 53 48 25 58-22 64-65 50-89 17-82-12z" fill="url(#gold)" stroke="#fff5a4" stroke-width="9" stroke-linejoin="round"/>
+ <path d="M-135 41l-21-42 24-45 52-27 68-8 61 12 44 35 24 40-20 47-55 31-67 8-61-10z" fill="url(#red)" stroke="#9d234f" stroke-width="7" stroke-linejoin="round"/>
+ <path d="M-56-86l-9-44 30 24 17-40 22 42 34-20-10 44" fill="#ffcf3e" stroke="#8f3d16" stroke-width="7" stroke-linejoin="round"/>
+ <path d="M-78-18q-25-32-48-5-17 23 2 49 20 22 46 4z" fill="#fff"/><path d="M30-18q25-32 48-5 17 23-2 49-20 22-46 4z" fill="#fff"/>
+ <ellipse cx="-54" cy="5" rx="15" ry="22" fill="#12234d"/><ellipse cx="53" cy="5" rx="15" ry="22" fill="#12234d"/>
+ <circle cx="-59" cy="-3" r="5" fill="#fff"/><circle cx="48" cy="-3" r="5" fill="#fff"/>
+ <path d="M-25 54q25 18 50 0" fill="none" stroke="#7c1b2d" stroke-width="8" stroke-linecap="round"/>
+ <path d="M-137 92l-48 24 13-57M134 92l49 24-13-57" fill="#ffb62c" stroke="#a64b1d" stroke-width="8" stroke-linejoin="round"/>
+</g>
+<g transform="translate(1000 180) rotate(14)" filter="url(#shadow)"><path d="M0 0h96v55H0z" rx="10" fill="#fff"/><path d="M8 8h80v39H8z" fill="#ffcf3c"/><path d="M48 8v39" stroke="#f45b54" stroke-width="8"/></g>
+<g transform="translate(190 530) rotate(-13)" filter="url(#shadow)"><path d="M0 0h90v50H0z" fill="#fff" rx="10"/><path d="M8 8h74v34H8z" fill="url(#blue)"/><path d="M28 8v34M58 8v34" stroke="#fff" stroke-opacity=".55" stroke-width="3"/></g>
+<g text-anchor="middle" font-family="Arial, sans-serif">
+ <text x="640" y="94" font-size="22" font-weight="700" letter-spacing="7" fill="#b9faff">HYPERSOFT PRESENTS</text>
+ <text x="640" y="157" font-size="58" font-weight="900" letter-spacing="2" fill="#fff8d9" stroke="#15386e" stroke-width="12" paint-order="stroke" filter="url(#shadow)">CONQUERX</text>
+ <text x="640" y="626" font-size="25" font-weight="800" letter-spacing="3" fill="#ffffff">CONQUER THE ARENA</text>
+ <text x="640" y="661" font-size="16" font-weight="600" letter-spacing="2" fill="#b9faff">CAPTURE • EXPAND • DOMINATE</text>
+</g>
+</svg>
