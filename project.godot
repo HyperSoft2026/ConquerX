@@ -11,6 +11,7 @@ config/icon="res://assets/icon/Logo_ConquerX.png"
 I18n="*res://game/scripts/i18n.gd"
 Performance="*res://game/scripts/performance.gd"
 Seasons="*res://game/scripts/seasons.gd"
+MatchTracker="*res://game/scripts/match_tracker.gd"
 
 [display]
 
