@@ -1,0 +1,35 @@
+name: ConquerX Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export signed Android APK
+        run: |
+          mkdir -p build
+          mkdir -p /root/.config/godot
+          godot --headless --path . --editor --quit
+          godot --headless --path . --export-release "Android" build/ConquerX.apk
+
+      - name: Verify APK
+        run: |
+          test -s build/ConquerX.apk
+          file build/ConquerX.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConquerX-Android-APK
+          path: build/ConquerX.apk
+          if-no-files-found: error
+          retention-days: 14
