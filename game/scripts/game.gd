@@ -264,6 +264,15 @@ func _update_ui() -> void:
         var seconds: int = maxi(0, int(match_remaining_ms / 1000))
         status_label.text = "LIVE • %02d:%02d" % [int(seconds/60),seconds%60]
 
+func _unhandled_key_input(event:InputEvent) -> void:
+    if event is InputEventKey and event.pressed and not event.echo:
+        if event.keycode == KEY_ESCAPE or event.keycode == KEY_BACK:
+            if _ui_open():
+                _close_existing()
+            else:
+                _show_pause_menu()
+            get_viewport().set_input_as_handled()
+
 func _on_joystick_vector_changed(value:Vector2) -> void:
     input_vector = Vector2.ZERO if _ui_open() else value
 
@@ -299,13 +308,15 @@ func _draw() -> void:
 
 
 func _player_color(id:int,alpha:float)->Color:
-    var skin_id := 1
-    if players.has(id):
-        skin_id = int(players[id].get("skin",1))
-    return Color.from_hsv(fmod(float(max(0,skin_id-1))*0.02,1.0),0.72,0.95,alpha)
+    var palette:Array = [Color("#ff5252"), Color("#43a5ff"), Color("#5fe08a"), Color("#ffd447"), Color("#bd7bff"), Color("#ff8a3d")]
+    var index := posmod(max(1, id) - 1, palette.size())
+    var color:Color = palette[index]
+    color.a = alpha
+    return color
 
 func _close_existing() -> void:
     profile_open=false;leaderboard_open=false;skins_open=false;shop_open=false;settings_open=false
+    input_vector = Vector2.ZERO
     profile_panel.visible=false;leaderboard_panel.visible=false;skins_panel.visible=false
     if dynamic_panel != null:
         dynamic_panel.queue_free()
@@ -369,7 +380,8 @@ func _unlocked()->Array:
 func _new_panel(title:String,pos:Vector2,size:Vector2)->Panel:
     if dynamic_panel != null: dynamic_panel.queue_free()
     dynamic_panel=Panel.new();dynamic_panel.position=pos;dynamic_panel.size=size;$HUD.add_child(dynamic_panel)
-    var label:=Label.new();label.text=title;label.position=Vector2(24,18);label.add_theme_font_size_override("font_size",26);dynamic_panel.add_child(label)
+    var label:=Label.new();label.text=title;label.position=Vector2(24,18);label.size=Vector2(size.x-130,42);label.add_theme_font_size_override("font_size",26);dynamic_panel.add_child(label)
+    var close:=Button.new();close.text="✕";close.position=Vector2(size.x-74,14);close.size=Vector2(52,46);close.focus_mode=Control.FOCUS_NONE;close.pressed.connect(Callable(self,"_close_existing"));dynamic_panel.add_child(close)
     return dynamic_panel
 func _button(parent:Control,text:String,pos:Vector2,size:Vector2,callback:Callable)->Button:
     var b:=Button.new();b.text=text;b.position=pos;b.size=size;b.pressed.connect(callback);parent.add_child(b);return b
@@ -394,7 +406,8 @@ func _show_settings() -> void:
     _button(panel,"Sound: %s" % ("ON" if sound_enabled else "OFF"),Vector2(60,85),Vector2(460,62),Callable(self,"_toggle_sound"))
     _button(panel,"Music: %s" % ("ON" if music_enabled else "OFF"),Vector2(60,160),Vector2(460,62),Callable(self,"_toggle_music"))
     _button(panel,"Effects: %s" % ("ON" if effects_enabled else "OFF"),Vector2(60,235),Vector2(460,62),Callable(self,"_toggle_effects"))
-    _button(panel,"Back to Match",Vector2(60,330),Vector2(460,62),Callable(self,"_close_existing"))
+    _button(panel,I18n.text_for("language") + ": " + ("English" if I18n.is_arabic() else "العربية"),Vector2(60,310),Vector2(460,54),Callable(self,"_toggle_language"))
+    _button(panel,I18n.text_for("back_match"),Vector2(60,380),Vector2(460,54),Callable(self,"_close_existing"))
 func _toggle_sound()->void:sound_enabled=!sound_enabled;_show_settings()
 func _toggle_music()->void:
     music_enabled=!music_enabled
@@ -403,6 +416,10 @@ func _toggle_music()->void:
     else: music_player.stop()
     _show_settings()
 func _toggle_effects()->void:effects_enabled=!effects_enabled;_show_settings()
+func _toggle_language()->void:
+    I18n.set_language("en" if I18n.is_arabic() else "ar")
+    I18n.apply_tree($HUD)
+    _show_settings()
 
 func _show_match_end(data:Dictionary) -> void:
     _close_existing()
