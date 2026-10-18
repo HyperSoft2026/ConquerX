@@ -14,7 +14,7 @@ func _ready() -> void:
         language = str(cfg.get_value("settings", "language", "en"))
     if language != "ar" and language != "en": language = "en"
 
-func tr(key:String) -> String:
+func text_for(key: String) -> String:
     return str(T.get(language, T["en"]).get(key, key))
 
 func set_language(value:String) -> void:
