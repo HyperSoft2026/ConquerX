@@ -64,6 +64,7 @@ func _ready() -> void:
     $HUD/TopBar/SkinsButton.visible = false
     $HUD/JoystickHint.visible = false
     $HUD/VirtualJoystick.vector_changed.connect(_on_joystick_vector_changed)
+    _add_panel_close_buttons()
     session_token = str(get_meta("session_token", ""))
     account = get_meta("account", {})
     _setup_audio()
@@ -85,6 +86,20 @@ func _ready() -> void:
         status_label.text = "Session missing"
         return
     _connect_game()
+
+func _add_panel_close_buttons() -> void:
+    _add_panel_close_button(profile_panel, 510, 12)
+    _add_panel_close_button(leaderboard_panel, 720, 10)
+    _add_panel_close_button(skins_panel, 870, 10)
+
+func _add_panel_close_button(panel:Control, x:float, y:float) -> void:
+    var close := Button.new()
+    close.text = "✕"
+    close.position = Vector2(x, y)
+    close.size = Vector2(48, 44)
+    close.focus_mode = Control.FOCUS_NONE
+    close.pressed.connect(Callable(self, "_close_existing"))
+    panel.add_child(close)
 
 func _add_header_buttons() -> void:
     $HUD/TopBar/Player.position = Vector2(18, 8)
