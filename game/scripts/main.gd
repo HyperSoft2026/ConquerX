@@ -170,7 +170,8 @@ func _rebuild_home() -> void:
     home_buttons.clear()
 
     home_panel = Panel.new()
-    home_panel.position = Vector2(24, 102)
+    var viewport_size := get_viewport_rect().size
+    home_panel.position = Vector2(maxf(24.0, (viewport_size.x - 1232.0) * 0.5), maxf(24.0, (viewport_size.y - 590.0) * 0.5))
     home_panel.size = Vector2(1232, 590)
     home_panel.add_theme_stylebox_override("panel", _menu_style(Color("#071a3a"), Color("#2bd7ff"), 26, 2))
     add_child(home_panel)
@@ -284,7 +285,7 @@ func _rebuild_home() -> void:
 
     I18n.apply_tree(home_panel)
     if has_node("Mascot"):
-        $Mascot.position = Vector2(715, 330)
+        $Mascot.position = home_panel.position + Vector2(691, 228)
         $Mascot.scale = Vector2(0.34, 0.34)
         $Mascot.move_to_front()
 
