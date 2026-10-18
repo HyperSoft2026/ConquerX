@@ -26,6 +26,9 @@ const GRID_HEIGHT = WORLD_HEIGHT / CELL_SIZE;
 const TICK_MS = 50;
 const PLAYER_SPEED = 340;
 const MAX_PLAYERS_PER_MATCH = 40;
+const RESPAWN_MS = 2500;
+const SAVE_MS = 5000;
+const COMBAT_DISTANCE = 48;
 
 const publicRoot = path.join(__dirname, 'public');
 const staticRoot = path.join(__dirname, 'assets');
@@ -39,439 +42,255 @@ function serveFile(res, filePath) {
     res.writeHead(200, { 'Content-Type': mimeTypes[extension] || 'application/octet-stream' });
     res.end(content);
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
-
 function sendJson(res, statusCode, body) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(body));
 }
-
-function createSignedState(loginSessionId) {
-  const payload = `${loginSessionId}.${Date.now()}`;
+function createSignedState(id) {
+  const payload = `${id}.${Date.now()}`;
   const signature = crypto.createHmac('sha256', OAUTH_STATE_SECRET).update(payload).digest('base64url');
   return `${Buffer.from(payload).toString('base64url')}.${signature}`;
 }
-
 function readSignedState(state) {
   if (!OAUTH_STATE_SECRET || !state) return null;
-  const [encodedPayload, signature] = state.split('.');
-  if (!encodedPayload || !signature) return null;
+  const [encoded, signature] = state.split('.');
+  if (!encoded || !signature) return null;
   let payload;
-  try { payload = Buffer.from(encodedPayload, 'base64url').toString('utf8'); } catch { return null; }
+  try { payload = Buffer.from(encoded, 'base64url').toString('utf8'); } catch { return null; }
   const expected = crypto.createHmac('sha256', OAUTH_STATE_SECRET).update(payload).digest('base64url');
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
+  const a = Buffer.from(signature); const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   const dot = payload.lastIndexOf('.');
   if (dot <= 0) return null;
-  const loginSessionId = payload.slice(0, dot);
-  const issuedAt = Number(payload.slice(dot + 1));
-  if (!Number.isFinite(issuedAt) || Date.now() - issuedAt > LOGIN_SESSION_TTL_MS) return null;
-  if (!/^[a-f0-9-]{36}$/i.test(loginSessionId)) return null;
-  return loginSessionId;
+  const id = payload.slice(0, dot); const issued = Number(payload.slice(dot + 1));
+  if (!Number.isFinite(issued) || Date.now() - issued > LOGIN_SESSION_TTL_MS || !/^[a-f0-9-]{36}$/i.test(id)) return null;
+  return id;
 }
-
 function createToken() { return crypto.randomBytes(32).toString('base64url'); }
-
-async function checkDatabase() {
-  const result = await pool.query('SELECT 1 AS ok');
-  return result.rows[0]?.ok === 1;
+function getBearerToken(req) {
+  const h = req.headers.authorization || '';
+  return h.startsWith('Bearer ') ? h.slice(7).trim() : '';
 }
+async function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > 20000) req.destroy(); });
+    req.on('end', () => { try { resolve(body ? JSON.parse(body) : {}); } catch { reject(new Error('Invalid JSON')); } });
+    req.on('error', reject);
+  });
+}
+
+const skins = Array.from({ length: 50 }, (_, i) => ({
+  id: i + 1,
+  name: `Skin ${String(i + 1).padStart(2, '0')}`,
+  hue: Math.round((i * 360) / 50),
+  rarity: i < 25 ? 'Common' : i < 40 ? 'Rare' : i < 48 ? 'Epic' : 'Legendary',
+  unlocked_by_default: i === 0
+}));
 
 async function ensureDatabaseSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accounts (
-      id BIGSERIAL PRIMARY KEY,
-      discord_user_id TEXT UNIQUE,
-      username TEXT NOT NULL,
-      avatar TEXT,
-      gold INTEGER NOT NULL DEFAULT 0,
-      gems INTEGER NOT NULL DEFAULT 0,
-      kills INTEGER NOT NULL DEFAULT 0,
-      wins INTEGER NOT NULL DEFAULT 0,
-      level INTEGER NOT NULL DEFAULT 1,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      id BIGSERIAL PRIMARY KEY, discord_user_id TEXT UNIQUE, username TEXT NOT NULL, avatar TEXT,
+      gold INTEGER NOT NULL DEFAULT 0, gems INTEGER NOT NULL DEFAULT 0, kills INTEGER NOT NULL DEFAULT 0,
+      wins INTEGER NOT NULL DEFAULT 0, level INTEGER NOT NULL DEFAULT 1, selected_skin INTEGER NOT NULL DEFAULT 1,
+      unlocked_skins JSONB NOT NULL DEFAULT '[1]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS selected_skin INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS unlocked_skins JSONB NOT NULL DEFAULT '[1]'::jsonb;
     CREATE TABLE IF NOT EXISTS login_sessions (
-      id UUID PRIMARY KEY,
-      status TEXT NOT NULL DEFAULT 'pending',
-      account_id BIGINT REFERENCES accounts(id) ON DELETE SET NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      expires_at TIMESTAMPTZ NOT NULL,
-      completed_at TIMESTAMPTZ,
-      session_token TEXT
+      id UUID PRIMARY KEY, status TEXT NOT NULL DEFAULT 'pending', account_id BIGINT REFERENCES accounts(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ NOT NULL, completed_at TIMESTAMPTZ, session_token TEXT
     );
     CREATE TABLE IF NOT EXISTS app_sessions (
-      token_hash TEXT PRIMARY KEY,
-      account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      expires_at TIMESTAMPTZ NOT NULL
+      token_hash TEXT PRIMARY KEY, account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ NOT NULL
     );
-    ALTER TABLE login_sessions ADD COLUMN IF NOT EXISTS session_token TEXT;
     CREATE INDEX IF NOT EXISTS idx_login_sessions_expires_at ON login_sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_app_sessions_account_id ON app_sessions(account_id);
+    CREATE TABLE IF NOT EXISTS match_states (
+      id TEXT PRIMARY KEY, territory JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
 }
-
-async function getDiscordUser(accessToken) {
-  const response = await fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!response.ok) throw new Error(`Discord user request failed: ${response.status}`);
-  return response.json();
-}
-
-async function exchangeDiscordCode(code) {
-  const body = new URLSearchParams({ client_id: DISCORD_CLIENT_ID, client_secret: DISCORD_CLIENT_SECRET, grant_type: 'authorization_code', code, redirect_uri: DISCORD_REDIRECT_URI });
-  const response = await fetch('https://discord.com/api/v10/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-  if (!response.ok) throw new Error(`Discord token exchange failed: ${response.status} ${await response.text()}`);
-  return response.json();
-}
-
-async function upsertDiscordAccount(discordUser) {
-  const username = discordUser.global_name || discordUser.username || `Player_${discordUser.id.slice(-6)}`;
-  const avatar = discordUser.avatar || null;
-  const result = await pool.query(`
-    INSERT INTO accounts (discord_user_id, username, avatar) VALUES ($1, $2, $3)
-    ON CONFLICT (discord_user_id) DO UPDATE SET username = EXCLUDED.username, avatar = EXCLUDED.avatar, updated_at = NOW()
-    RETURNING id, username, avatar, gold, gems, kills, wins, level
-  `, [discordUser.id, username, avatar]);
-  return result.rows[0];
-}
-
-async function completeLogin(loginSessionId, accountId) {
-  const token = createToken();
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(`UPDATE login_sessions SET status = 'completed', account_id = $2, completed_at = NOW(), session_token = $3 WHERE id = $1 AND status = 'pending'`, [loginSessionId, accountId, token]);
-    await client.query(`INSERT INTO app_sessions (token_hash, account_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '30 days')`, [tokenHash, accountId]);
-    await client.query('COMMIT');
-    return token;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-async function consumeLoginSession(loginSessionId) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await client.query(`SELECT ls.status, ls.session_token, a.id, a.username, a.avatar, a.gold, a.gems, a.kills, a.wins, a.level FROM login_sessions ls LEFT JOIN accounts a ON a.id = ls.account_id WHERE ls.id = $1 AND ls.expires_at > NOW() FOR UPDATE`, [loginSessionId]);
-    if (!result.rowCount) { await client.query('ROLLBACK'); return null; }
-    const row = result.rows[0];
-    if (row.status !== 'completed' || !row.session_token) { await client.query('ROLLBACK'); return { pending: true }; }
-    await client.query('UPDATE login_sessions SET session_token = NULL WHERE id = $1', [loginSessionId]);
-    await client.query('COMMIT');
-    return { pending: false, token: row.session_token, account: { id: row.id, username: row.username, avatar: row.avatar, gold: row.gold, gems: row.gems, kills: row.kills, wins: row.wins, level: row.level } };
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
+async function checkDatabase() { const r = await pool.query('SELECT 1 AS ok'); return r.rows[0]?.ok === 1; }
 async function getAccountFromToken(token) {
   if (!token) return null;
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  const result = await pool.query(`SELECT a.id, a.username, a.avatar, a.gold, a.gems, a.kills, a.wins, a.level FROM app_sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = $1 AND s.expires_at > NOW()`, [tokenHash]);
-  return result.rows[0] || null;
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
+  const r = await pool.query(`SELECT a.id,a.username,a.avatar,a.gold,a.gems,a.kills,a.wins,a.level,a.selected_skin,a.unlocked_skins FROM app_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>NOW()`, [hash]);
+  return r.rows[0] || null;
+}
+async function upsertDiscordAccount(user) {
+  const username = user.global_name || user.username || `Player_${user.id.slice(-6)}`;
+  const r = await pool.query(`INSERT INTO accounts(discord_user_id,username,avatar) VALUES($1,$2,$3)
+    ON CONFLICT(discord_user_id) DO UPDATE SET username=EXCLUDED.username,avatar=EXCLUDED.avatar,updated_at=NOW()
+    RETURNING id,username,avatar,gold,gems,kills,wins,level,selected_skin,unlocked_skins`, [user.id, username, user.avatar || null]);
+  return r.rows[0];
+}
+async function completeLogin(loginId, accountId) {
+  const token = createToken(); const hash = crypto.createHash('sha256').update(token).digest('hex');
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    await c.query(`UPDATE login_sessions SET status='completed',account_id=$2,completed_at=NOW(),session_token=$3 WHERE id=$1 AND status='pending'`, [loginId, accountId, token]);
+    await c.query(`INSERT INTO app_sessions(token_hash,account_id,expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')`, [hash, accountId]);
+    await c.query('COMMIT'); return token;
+  } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+}
+async function consumeLoginSession(id) {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    const r = await c.query(`SELECT ls.status,ls.session_token,a.id,a.username,a.avatar,a.gold,a.gems,a.kills,a.wins,a.level,a.selected_skin,a.unlocked_skins FROM login_sessions ls LEFT JOIN accounts a ON a.id=ls.account_id WHERE ls.id=$1 AND ls.expires_at>NOW() FOR UPDATE`, [id]);
+    if (!r.rowCount) { await c.query('ROLLBACK'); return null; }
+    const row = r.rows[0];
+    if (row.status !== 'completed' || !row.session_token) { await c.query('ROLLBACK'); return { pending: true }; }
+    await c.query('UPDATE login_sessions SET session_token=NULL WHERE id=$1', [id]); await c.query('COMMIT');
+    return { pending:false, token:row.session_token, account: row };
+  } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+}
+async function getAccountById(id) {
+  const r = await pool.query(`SELECT id,username,avatar,gold,gems,kills,wins,level,selected_skin,unlocked_skins FROM accounts WHERE id=$1`, [id]);
+  return r.rows[0] || null;
 }
 
-function getBearerToken(req) {
-  const header = req.headers.authorization || '';
-  return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+const match = { id:'main', players:new Map(), territory:new Uint32Array(GRID_WIDTH*GRID_HEIGHT), nextPlayerNumber:1, loaded:false };
+async function loadMatchState() {
+  const r = await pool.query('SELECT territory FROM match_states WHERE id=$1', [match.id]);
+  if (r.rowCount && Array.isArray(r.rows[0].territory)) {
+    const saved = r.rows[0].territory;
+    for (let i=0;i<match.territory.length && i<saved.length;i++) match.territory[i] = Number(saved[i]) || 0;
+  }
+  match.loaded = true;
 }
-
-const matches = new Map();
-const connections = new Map();
-
-function createMatch() {
-  const match = {
-    id: crypto.randomUUID(),
-    players: new Map(),
-    territory: new Uint32Array(GRID_WIDTH * GRID_HEIGHT),
-    nextPlayerNumber: 1
-  };
-  matches.set(match.id, match);
-  return match;
+let saveQueued = false;
+async function saveMatchState() {
+  if (!match.loaded || saveQueued) return;
+  saveQueued = true;
+  try {
+    await pool.query(`INSERT INTO match_states(id,territory,updated_at) VALUES($1,$2,NOW()) ON CONFLICT(id) DO UPDATE SET territory=EXCLUDED.territory,updated_at=NOW()`, [match.id, JSON.stringify(Array.from(match.territory))]);
+  } catch (e) { console.error('Match persistence failed:', e.message); }
+  finally { saveQueued = false; }
 }
-
-let match = createMatch();
-
 function spawnForNumber(n) {
-  const margin = 250;
-  const slots = [
-    [margin, margin], [WORLD_WIDTH - margin, margin], [margin, WORLD_HEIGHT - margin], [WORLD_WIDTH - margin, WORLD_HEIGHT - margin],
-    [WORLD_WIDTH / 2, WORLD_HEIGHT / 2]
-  ];
-  return slots[(n - 1) % slots.length].slice();
+  const margin=250; const slots=[[margin,margin],[WORLD_WIDTH-margin,margin],[margin,WORLD_HEIGHT-margin],[WORLD_WIDTH-margin,WORLD_HEIGHT-margin],[WORLD_WIDTH/2,WORLD_HEIGHT/2]];
+  return slots[(n-1)%slots.length].slice();
 }
-
-function paintStartTerritory(matchState, player) {
-  const cx = Math.floor(player.x / CELL_SIZE);
-  const cy = Math.floor(player.y / CELL_SIZE);
-  for (let y = cy - 2; y <= cy + 2; y += 1) {
-    for (let x = cx - 2; x <= cx + 2; x += 1) {
-      if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) matchState.territory[y * GRID_WIDTH + x] = player.id;
-    }
-  }
+function paintStartTerritory(player) {
+  const cx=Math.floor(player.x/CELL_SIZE), cy=Math.floor(player.y/CELL_SIZE);
+  let count=0;
+  for(let y=cy-2;y<=cy+2;y++) for(let x=cx-2;x<=cx+2;x++) if(x>=0&&x<GRID_WIDTH&&y>=0&&y<GRID_HEIGHT){ const i=y*GRID_WIDTH+x; if(match.territory[i]===0){match.territory[i]=player.accountId;count++;} }
+  player.territory += count;
 }
-
-function paintMovementTerritory(matchState, player) {
-  const radius = 1;
-  const cx = Math.floor(player.x / CELL_SIZE);
-  const cy = Math.floor(player.y / CELL_SIZE);
-  let added = 0;
-  for (let y = cy - radius; y <= cy + radius; y += 1) {
-    for (let x = cx - radius; x <= cx + radius; x += 1) {
-      if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) continue;
-      const index = y * GRID_WIDTH + x;
-      if (matchState.territory[index] !== player.id) {
-        matchState.territory[index] = player.id;
-        added += 1;
-      }
-    }
-  }
+function paintMovementTerritory(player) {
+  const cx=Math.floor(player.x/CELL_SIZE), cy=Math.floor(player.y/CELL_SIZE); let added=0;
+  for(let y=cy-1;y<=cy+1;y++) for(let x=cx-1;x<=cx+1;x++) if(x>=0&&x<GRID_WIDTH&&y>=0&&y<GRID_HEIGHT){ const i=y*GRID_WIDTH+x; if(match.territory[i]!==player.accountId){match.territory[i]=player.accountId;added++;} }
   player.territory += added;
 }
-
-function playerSnapshot(player) {
-  return {
-    id: player.id,
-    username: player.username,
-    x: Math.round(player.x),
-    y: Math.round(player.y),
-    angle: player.angle,
-    territory: player.territory,
-    connected: player.socket.readyState === WebSocket.OPEN
-  };
+function clearPlayerTerritory(accountId) { for(let i=0;i<match.territory.length;i++) if(match.territory[i]===accountId) match.territory[i]=0; }
+function respawnPlayer(player) {
+  const spawn=spawnForNumber(player.id); player.x=spawn[0]; player.y=spawn[1]; player.inputX=0; player.inputY=0; player.dead=false; player.respawnAt=0; player.territory=0; paintStartTerritory(player);
 }
-
-function matchSnapshot(matchState) {
-  return {
-    type: 'state',
-    world: { width: WORLD_WIDTH, height: WORLD_HEIGHT, cell_size: CELL_SIZE, grid_width: GRID_WIDTH, grid_height: GRID_HEIGHT },
-    self_id: null,
-    players: Array.from(matchState.players.values()).map(playerSnapshot),
-    territory: Array.from(matchState.territory)
-  };
+async function recordKill(killer,victim) {
+  await pool.query(`UPDATE accounts SET kills=kills+1,updated_at=NOW() WHERE id=$1`, [killer.accountId]);
+  await pool.query(`UPDATE accounts SET wins=wins+0,updated_at=NOW() WHERE id=$1`, [victim.accountId]);
 }
-
-function send(socket, payload) {
-  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+function runtimeTerritory() {
+  const ownerToRuntime=new Map(); for(const p of match.players.values()) ownerToRuntime.set(p.accountId,p.id);
+  return Array.from(match.territory, owner => ownerToRuntime.get(owner)||0);
 }
-
-function broadcast(matchState, payload) {
-  for (const player of matchState.players.values()) send(player.socket, payload);
+function playerSnapshot(p) { return { id:p.id,username:p.username,x:Math.round(p.x),y:Math.round(p.y),angle:p.angle,territory:p.territory,kills:p.kills,dead:p.dead,respawn_ms:p.dead?Math.max(0,p.respawnAt-Date.now()):0,skin:p.skin,connected:p.socket.readyState===WebSocket.OPEN }; }
+function snapshotFor(p) { return { type:'state',world:{width:WORLD_WIDTH,height:WORLD_HEIGHT,cell_size:CELL_SIZE,grid_width:GRID_WIDTH,grid_height:GRID_HEIGHT},self_id:p.id,players:Array.from(match.players.values()).map(playerSnapshot),territory:runtimeTerritory() }; }
+function send(ws,payload){if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(payload));}
+function broadcast(payload){for(const p of match.players.values())send(p.socket,payload);}
+function removePlayer(p){if(!p)return;match.players.delete(p.id);broadcast({type:'player_left',id:p.id});}
+function handleGameMessage(p,raw){
+  let m; try{m=JSON.parse(raw.toString());}catch{return;} if(!m||typeof m!=='object')return;
+  if(m.type==='input'&&!p.dead){let x=Number(m.x),y=Number(m.y);if(!Number.isFinite(x)||!Number.isFinite(y))return;const l=Math.hypot(x,y);p.inputX=l>1?x/l:Math.max(-1,Math.min(1,x));p.inputY=l>1?y/l:Math.max(-1,Math.min(1,y));p.lastInputAt=Date.now();}
 }
-
-function removePlayer(matchState, player) {
-  if (!player) return;
-  matchState.players.delete(player.id);
-  connections.delete(player.socket);
-  broadcast(matchState, { type: 'player_left', id: player.id });
-}
-
-function handleGameMessage(player, raw) {
-  let message;
-  try { message = JSON.parse(raw.toString()); } catch { return; }
-  if (!message || typeof message !== 'object') return;
-  if (message.type === 'input') {
-    const x = Number(message.x);
-    const y = Number(message.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    const length = Math.hypot(x, y);
-    if (length > 1) {
-      player.inputX = x / length;
-      player.inputY = y / length;
-    } else {
-      player.inputX = Math.max(-1, Math.min(1, x));
-      player.inputY = Math.max(-1, Math.min(1, y));
-    }
-    player.lastInputAt = Date.now();
-  }
-}
-
-const gameWss = new WebSocketServer({ noServer: true });
-
-gameWss.on('connection', (socket, req, account) => {
-  if (match.players.size >= MAX_PLAYERS_PER_MATCH) {
-    send(socket, { type: 'error', message: 'Match is full' });
-    socket.close();
-    return;
-  }
-  const id = match.nextPlayerNumber++;
-  const spawn = spawnForNumber(id);
-  const player = {
-    id,
-    accountId: account.id,
-    username: account.username,
-    socket,
-    x: spawn[0],
-    y: spawn[1],
-    angle: 0,
-    inputX: 0,
-    inputY: 0,
-    territory: 25,
-    lastInputAt: Date.now()
-  };
-  match.players.set(player.id, player);
-  connections.set(socket, player);
-  paintStartTerritory(match, player);
-
-  const snapshot = matchSnapshot(match);
-  snapshot.self_id = player.id;
-  send(socket, snapshot);
-  broadcast(match, { type: 'player_joined', player: playerSnapshot(player) });
-
-  socket.on('message', (data) => handleGameMessage(player, data));
-  socket.on('close', () => removePlayer(match, player));
-  socket.on('error', () => removePlayer(match, player));
+const gameWss=new WebSocketServer({noServer:true});
+gameWss.on('connection',(socket,req,account)=>{
+  if(match.players.size>=MAX_PLAYERS_PER_MATCH){send(socket,{type:'error',message:'Match is full'});socket.close();return;}
+  const id=match.nextPlayerNumber++,spawn=spawnForNumber(id),skin=Number(account.selected_skin)||1;
+  const p={id,accountId:Number(account.id),username:account.username,socket,x:spawn[0],y:spawn[1],angle:0,inputX:0,inputY:0,territory:0,kills:0,lastInputAt:Date.now(),dead:false,respawnAt:0,skin};
+  match.players.set(id,p); paintStartTerritory(p);
+  send(socket,snapshotFor(p)); broadcast({type:'player_joined',player:playerSnapshot(p)});
+  socket.on('message',data=>handleGameMessage(p,data)); socket.on('close',()=>removePlayer(p)); socket.on('error',()=>removePlayer(p));
 });
 
-setInterval(() => {
-  const now = Date.now();
-  for (const player of match.players.values()) {
-    const idle = now - player.lastInputAt > 1000;
-    if (idle) { player.inputX = 0; player.inputY = 0; }
-    const length = Math.hypot(player.inputX, player.inputY);
-    if (length > 0.001) {
-      player.x += (player.inputX / Math.max(1, length)) * PLAYER_SPEED * (TICK_MS / 1000);
-      player.y += (player.inputY / Math.max(1, length)) * PLAYER_SPEED * (TICK_MS / 1000);
-      player.x = Math.max(20, Math.min(WORLD_WIDTH - 20, player.x));
-      player.y = Math.max(20, Math.min(WORLD_HEIGHT - 20, player.y));
-      player.angle = Math.atan2(player.inputY, player.inputX);
-      paintMovementTerritory(match, player);
+setInterval(async()=>{
+  const now=Date.now();
+  for(const p of match.players.values()){
+    if(p.dead){if(now>=p.respawnAt){respawnPlayer(p);send(p.socket,{type:'respawned'});}continue;}
+    if(now-p.lastInputAt>1000){p.inputX=0;p.inputY=0;}
+    const l=Math.hypot(p.inputX,p.inputY);
+    if(l>0.001){p.x+=(p.inputX/l)*PLAYER_SPEED*(TICK_MS/1000);p.y+=(p.inputY/l)*PLAYER_SPEED*(TICK_MS/1000);p.x=Math.max(20,Math.min(WORLD_WIDTH-20,p.x));p.y=Math.max(20,Math.min(WORLD_HEIGHT-20,p.y));p.angle=Math.atan2(p.inputY,p.inputX);paintMovementTerritory(p);}
+  }
+  const alive=[...match.players.values()].filter(p=>!p.dead);
+  for(let i=0;i<alive.length;i++) for(let j=i+1;j<alive.length;j++){
+    const a=alive[i],b=alive[j],d=Math.hypot(a.x-b.x,a.y-b.y);
+    if(d<=COMBAT_DISTANCE){
+      const attacker=Math.hypot(a.inputX,a.inputY)>0.15?a:b;
+      const victim=attacker===a?b:a;
+      clearPlayerTerritory(victim.accountId); victim.dead=true; victim.respawnAt=Date.now()+RESPAWN_MS; victim.territory=0; attacker.kills+=1;
+      recordKill(attacker,victim).catch(e=>console.error('Kill persistence failed:',e.message));
+      send(victim.socket,{type:'death',killer:attacker.username,respawn_ms:RESPAWN_MS});
+      broadcast({type:'kill',killer_id:attacker.id,victim_id:victim.id,killer:attacker.username,victim:victim.username});
     }
   }
-  if (match.players.size > 0) broadcast(match, matchSnapshot(match));
-}, TICK_MS);
+  if(match.players.size) broadcast({type:'state_tick',players:[...match.players.values()].map(playerSnapshot),territory:runtimeTerritory()});
+},TICK_MS);
+setInterval(()=>saveMatchState().catch(()=>{}),SAVE_MS);
 
-const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-
-  const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const pathname = requestUrl.pathname;
-
-  if (req.method === 'GET' && pages[pathname]) { if (serveFile(res, path.join(publicRoot, pages[pathname]))) return; }
-  if (req.method === 'GET' && pathname === '/legal.css') { if (serveFile(res, path.join(publicRoot, 'legal.css'))) return; }
-  if (req.method === 'GET' && pathname.startsWith('/assets/')) {
-    const relativePath = pathname.slice('/assets/'.length);
-    const filePath = path.resolve(staticRoot, relativePath);
-    if (filePath.startsWith(staticRoot + path.sep) && serveFile(res, filePath)) return;
+const server=http.createServer(async(req,res)=>{
+  res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization');
+  if(req.method==='OPTIONS'){res.writeHead(204);return res.end();}
+  const u=new URL(req.url,`http://${req.headers.host||'localhost'}`),pathname=u.pathname;
+  if(req.method==='GET'&&pages[pathname]){if(serveFile(res,path.join(publicRoot,pages[pathname])))return;}
+  if(req.method==='GET'&&pathname==='/legal.css'){if(serveFile(res,path.join(publicRoot,'legal.css')))return;}
+  if(req.method==='GET'&&pathname.startsWith('/assets/')){const rel=pathname.slice(8),fp=path.resolve(staticRoot,rel);if(fp.startsWith(staticRoot+path.sep)&&serveFile(res,fp))return;}
+  if(req.method==='GET'&&pathname==='/auth/discord/start'){
+    if(!DISCORD_CLIENT_ID||!DISCORD_CLIENT_SECRET||!OAUTH_STATE_SECRET)return sendJson(res,503,{error:'Discord login is not configured'});
+    const supplied=u.searchParams.get('session'),id=supplied&&/^[a-f0-9-]{36}$/i.test(supplied)?supplied:crypto.randomUUID();
+    await pool.query(`INSERT INTO login_sessions(id,expires_at)VALUES($1,NOW()+INTERVAL '10 minutes') ON CONFLICT(id)DO UPDATE SET status='pending',account_id=NULL,created_at=NOW(),expires_at=NOW()+INTERVAL '10 minutes',completed_at=NULL,session_token=NULL`,[id]);
+    const state=createSignedState(id),params=new URLSearchParams({client_id:DISCORD_CLIENT_ID,response_type:'code',redirect_uri:DISCORD_REDIRECT_URI,scope:'identify',state});res.writeHead(302,{Location:`https://discord.com/oauth2/authorize?${params}`, 'Cache-Control':'no-store'});return res.end();
   }
-
-  if (req.method === 'GET' && pathname === '/auth/discord/start') {
-    if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET || !OAUTH_STATE_SECRET) return sendJson(res, 503, { error: 'Discord login is not configured' });
-    const suppliedSessionId = requestUrl.searchParams.get('session');
-    const loginSessionId = suppliedSessionId && /^[a-f0-9-]{36}$/i.test(suppliedSessionId) ? suppliedSessionId : crypto.randomUUID();
-    await pool.query(`INSERT INTO login_sessions (id, expires_at) VALUES ($1, NOW() + INTERVAL '10 minutes') ON CONFLICT (id) DO UPDATE SET status = 'pending', account_id = NULL, created_at = NOW(), expires_at = NOW() + INTERVAL '10 minutes', completed_at = NULL, session_token = NULL`, [loginSessionId]);
-    const state = createSignedState(loginSessionId);
-    const params = new URLSearchParams({ client_id: DISCORD_CLIENT_ID, response_type: 'code', redirect_uri: DISCORD_REDIRECT_URI, scope: 'identify', state });
-    res.writeHead(302, { Location: `https://discord.com/oauth2/authorize?${params.toString()}`, 'Cache-Control': 'no-store' });
-    return res.end();
+  if(req.method==='GET'&&pathname==='/auth/discord/callback'){
+    const code=u.searchParams.get('code'),state=u.searchParams.get('state'),id=readSignedState(state);if(!code||!id)return sendJson(res,400,{error:'Invalid Discord OAuth callback'});
+    try{const check=await pool.query(`SELECT id FROM login_sessions WHERE id=$1 AND status='pending' AND expires_at>NOW()`,[id]);if(!check.rowCount)return sendJson(res,400,{error:'Login session expired or already used'});
+      const body=new URLSearchParams({client_id:DISCORD_CLIENT_ID,client_secret:DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:DISCORD_REDIRECT_URI});
+      const tr=await fetch('https://discord.com/api/v10/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});if(!tr.ok)throw new Error('Discord token exchange failed');const tokenData=await tr.json();
+      const ur=await fetch('https://discord.com/api/v10/users/@me',{headers:{Authorization:`Bearer ${tokenData.access_token}`}});if(!ur.ok)throw new Error('Discord user lookup failed');const user=await ur.json();const account=await upsertDiscordAccount(user);await completeLogin(id,account.id);
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});return res.end('<!doctype html><html><body style="background:#090d16;color:#eef3ff;font-family:Arial;text-align:center;padding:60px"><h1>Discord connected</h1><p>تم تسجيل الدخول إلى ConquerX بنجاح. يمكنك العودة إلى اللعبة.</p></body></html>');
+    }catch(e){console.error('Discord OAuth callback failed:',e.message);return sendJson(res,500,{error:'Discord login failed'});}
   }
-
-  if (req.method === 'GET' && pathname === '/auth/discord/callback') {
-    const code = requestUrl.searchParams.get('code');
-    const state = requestUrl.searchParams.get('state');
-    const loginSessionId = readSignedState(state);
-    if (!code || !loginSessionId) return sendJson(res, 400, { error: 'Invalid Discord OAuth callback' });
-    try {
-      const sessionResult = await pool.query(`SELECT id FROM login_sessions WHERE id = $1 AND status = 'pending' AND expires_at > NOW()`, [loginSessionId]);
-      if (!sessionResult.rowCount) return sendJson(res, 400, { error: 'Login session expired or already used' });
-      const tokenResponse = await exchangeDiscordCode(code);
-      const discordUser = await getDiscordUser(tokenResponse.access_token);
-      const account = await upsertDiscordAccount(discordUser);
-      await completeLogin(loginSessionId, account.id);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      return res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ConquerX Login</title><style>body{margin:0;background:#090d16;color:#eef3ff;font-family:Arial,sans-serif;display:grid;place-items:center;min-height:100vh;text-align:center}.card{max-width:520px;padding:42px;border:1px solid #26324a;border-radius:20px;background:#111827}h1{margin-top:0}p{color:#aeb9cc}</style></head><body><main class="card"><h1>Discord connected</h1><p>تم تسجيل الدخول إلى ConquerX بنجاح. يمكنك العودة إلى اللعبة الآن.</p></main></body></html>`);
-    } catch (error) {
-      console.error('Discord OAuth callback failed:', error.message);
-      return sendJson(res, 500, { error: 'Discord login failed' });
-    }
+  if(req.method==='GET'&&pathname==='/auth/discord/status'){
+    const id=u.searchParams.get('session');if(!id||!/^[a-f0-9-]{36}$/i.test(id))return sendJson(res,400,{error:'Invalid session'});try{const login=await consumeLoginSession(id);if(!login)return sendJson(res,404,{status:'expired'});if(login.pending)return sendJson(res,200,{status:'pending'});return sendJson(res,200,{status:'completed',session_token:login.token,account:login.account});}catch(e){return sendJson(res,500,{error:'Login status failed'});}
   }
-
-  if (req.method === 'GET' && pathname === '/auth/discord/status') {
-    const sessionId = requestUrl.searchParams.get('session');
-    if (!sessionId || !/^[a-f0-9-]{36}$/i.test(sessionId)) return sendJson(res, 400, { error: 'Invalid session' });
-    try {
-      const login = await consumeLoginSession(sessionId);
-      if (!login) return sendJson(res, 404, { status: 'expired' });
-      if (login.pending) return sendJson(res, 200, { status: 'pending' });
-      return sendJson(res, 200, { status: 'completed', session_token: login.token, account: login.account });
-    } catch (error) {
-      console.error('Discord login status failed:', error.message);
-      return sendJson(res, 500, { error: 'Login status failed' });
-    }
+  const account=await getAccountFromToken(getBearerToken(req));
+  if(req.method==='GET'&&pathname==='/me'){if(!account)return sendJson(res,401,{error:'Unauthorized'});return sendJson(res,200,{account});}
+  if(req.method==='GET'&&pathname==='/profile'){if(!account)return sendJson(res,401,{error:'Unauthorized'});return sendJson(res,200,{profile:account,skins});}
+  if(req.method==='GET'&&pathname==='/skins'){return sendJson(res,200,{skins});}
+  if(req.method==='POST'&&pathname==='/profile/skin'){
+    if(!account)return sendJson(res,401,{error:'Unauthorized'});try{const data=await readJsonBody(req),skinId=Number(data.skin_id);if(!skins.some(s=>s.id===skinId))return sendJson(res,400,{error:'Invalid skin'});const unlocked=Array.isArray(account.unlocked_skins)?account.unlocked_skins.map(Number):[1];if(!unlocked.includes(skinId))return sendJson(res,403,{error:'Skin locked'});await pool.query('UPDATE accounts SET selected_skin=$2,updated_at=NOW() WHERE id=$1',[account.id,skinId]);return sendJson(res,200,{selected_skin:skinId});}catch(e){return sendJson(res,400,{error:'Invalid request'});}
   }
-
-  if (req.method === 'GET' && pathname === '/me') {
-    try {
-      const account = await getAccountFromToken(getBearerToken(req));
-      if (!account) return sendJson(res, 401, { error: 'Unauthorized' });
-      return sendJson(res, 200, { account });
-    } catch (error) {
-      console.error('Account lookup failed:', error.message);
-      return sendJson(res, 500, { error: 'Account lookup failed' });
-    }
+  if(req.method==='GET'&&pathname==='/leaderboard'){
+    const limit=Math.min(500,Math.max(1,Number(u.searchParams.get('limit')||500)));const sort=['gold','kills','gems','wins'].includes(u.searchParams.get('sort'))?u.searchParams.get('sort'):'gold';
+    const r=await pool.query(`SELECT id,username,avatar,gold,gems,kills,wins,level,ROW_NUMBER() OVER(ORDER BY ${sort} DESC,id ASC) AS rank FROM accounts ORDER BY ${sort} DESC,id ASC LIMIT $1`,[limit]);return sendJson(res,200,{sort,leaderboard:r.rows});
   }
-
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  if (req.method === 'GET' && pathname === '/health') {
-    try {
-      const database = await checkDatabase();
-      res.writeHead(200);
-      return res.end(JSON.stringify({ status: 'ok', database: database ? 'connected' : 'disconnected', game: 'ConquerX', realtime: 'websocket' }));
-    } catch (error) {
-      console.error('Database health check failed:', error.message);
-      res.writeHead(503);
-      return res.end(JSON.stringify({ status: 'error', database: 'disconnected', game: 'ConquerX' }));
-    }
-  }
-  if (req.method === 'GET' && pathname === '/') {
-    res.writeHead(200);
-    return res.end(JSON.stringify({ name: 'ConquerX', status: 'online', version: '0.4.0', realtime: 'websocket', world: { width: WORLD_WIDTH, height: WORLD_HEIGHT } }));
-  }
-  res.writeHead(404);
-  res.end(JSON.stringify({ error: 'Not Found' }));
+  res.setHeader('Content-Type','application/json; charset=utf-8');
+  if(req.method==='GET'&&pathname==='/health'){try{const db=await checkDatabase();res.writeHead(200);return res.end(JSON.stringify({status:'ok',database:db?'connected':'disconnected',game:'ConquerX',realtime:'websocket',persistent_match:true}));}catch{res.writeHead(503);return res.end(JSON.stringify({status:'error',database:'disconnected'}));}}
+  if(req.method==='GET'&&pathname==='/'){res.writeHead(200);return res.end(JSON.stringify({name:'ConquerX',status:'online',version:'0.5.0',features:['combat','respawn','leaderboard','profiles','50-skins','persistent-territory']}));}
+  res.writeHead(404);res.end(JSON.stringify({error:'Not Found'}));
 });
 
-const gamePath = '/ws';
-server.on('upgrade', async (req, socket, head) => {
-  try {
-    const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (requestUrl.pathname !== gamePath) { socket.destroy(); return; }
-    const token = requestUrl.searchParams.get('token') || '';
-    const account = await getAccountFromToken(token);
-    if (!account) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
-    gameWss.handleUpgrade(req, socket, head, (ws) => gameWss.emit('connection', ws, req, account));
-  } catch (error) {
-    console.error('WebSocket authentication failed:', error.message);
-    socket.destroy();
-  }
-});
+const gameWss=new WebSocketServer({noServer:true});
+server.on('upgrade',async(req,socket,head)=>{try{const u=new URL(req.url,`http://${req.headers.host||'localhost'}`);if(u.pathname!=='/ws'){socket.destroy();return;}const account=await getAccountFromToken(u.searchParams.get('token')||'');if(!account){socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');socket.destroy();return;}gameWss.handleUpgrade(req,socket,head,ws=>gameWss.emit('connection',ws,req,account));}catch(e){socket.destroy();}});
 
-server.listen(port, '0.0.0.0', async () => {
-  console.log(`ConquerX server listening on port ${port}`);
-  try { await ensureDatabaseSchema(); console.log('ConquerX database schema ready'); }
-  catch (error) { console.error('Database schema initialization failed:', error.message); }
-});
+gameWss.on('connection',(socket,req,account)=>{if(match.players.size>=MAX_PLAYERS_PER_MATCH){send(socket,{type:'error',message:'Match is full'});socket.close();return;}const id=match.nextPlayerNumber++,spawn=spawnForNumber(id),p={id,accountId:Number(account.id),username:account.username,socket,x:spawn[0],y:spawn[1],angle:0,inputX:0,inputY:0,territory:0,kills:0,lastInputAt:Date.now(),dead:false,respawnAt:0,skin:Number(account.selected_skin)||1};match.players.set(id,p);paintStartTerritory(p);send(socket,snapshotFor(p));broadcast({type:'player_joined',player:playerSnapshot(p)});socket.on('message',d=>handleGameMessage(p,d));socket.on('close',()=>removePlayer(p));socket.on('error',()=>removePlayer(p));});
 
-async function shutdown(signal) {
-  console.log(`${signal}: shutting down ConquerX server...`);
-  server.close(async () => { await pool.end(); process.exit(0); });
-}
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+server.listen(port,'0.0.0.0',async()=>{console.log(`ConquerX server listening on port ${port}`);try{await ensureDatabaseSchema();await loadMatchState();console.log('ConquerX database schema ready');}catch(e){console.error('Database schema initialization failed:',e.message);}});
+async function shutdown(signal){console.log(`${signal}: shutting down ConquerX...`);await saveMatchState();server.close(async()=>{await pool.end();process.exit(0);});}
+process.on('SIGTERM',()=>shutdown('SIGTERM'));process.on('SIGINT',()=>shutdown('SIGINT'));
