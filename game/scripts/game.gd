@@ -231,7 +231,7 @@ func _update_ui() -> void:
         territory_label.text = "Territory %s" % str(me.get("territory",0))
         kills_label.text = "⚔ %s" % str(me.get("kills",0))
     if match_status == "playing":
-        var seconds := max(0,int(match_remaining_ms/1000))
+        var seconds: int = maxi(0, int(match_remaining_ms / 1000))
         status_label.text = "LIVE • %02d:%02d" % [int(seconds/60),seconds%60]
 
 func _unhandled_input(event:InputEvent) -> void:
@@ -431,7 +431,7 @@ func _sound(freq:float,duration:float)->void:
     if not sound_enabled or not effects_enabled:return
     if not sfx_player.playing:sfx_player.play();sfx_playback=sfx_player.get_stream_playback()
     if sfx_playback==null:return
-    var frames:=min(sfx_playback.get_frames_available(),int(22050*duration))
+    var frames: int = mini(sfx_playback.get_frames_available(), int(22050 * duration))
     for i in range(frames):
         var v:=sin(TAU*freq*float(i)/22050.0)*0.08
         sfx_playback.push_frame(Vector2(v,v))
