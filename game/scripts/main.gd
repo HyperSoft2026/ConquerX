@@ -93,7 +93,15 @@ func _login_done(result:int, code:int, _headers:PackedStringArray, body:PackedBy
     logged_in = true
     login_session_id = ""
     login_button.disabled = true
+    _sync_season()
     _show_home()
+
+func _sync_season() -> void:
+    if session_token.is_empty(): return
+    _http_get("/season", func(data):
+        Seasons.apply_server_data(data)
+        if home_panel != null: _rebuild_home()
+    )
 
 func _show_home() -> void:
     $Title.text = "ConquerX"
@@ -138,9 +146,23 @@ func _rebuild_home() -> void:
     var note := Label.new()
     note.position = Vector2(40, 292)
     note.size = Vector2(1020, 110)
-    note.text = "🌐 %s\n🏆 %s\n✨ %s • %s" % [I18n.tr("multiplayer_note"), I18n.tr("reward_note"), Seasons.season_name(), ("المستوى %d" % Seasons.season_level()) if I18n.is_arabic() else ("Level %d" % Seasons.season_level())]
+    note.text = "🌐 %s\n🏆 %s\n✨ %s • %s" % [I18n.tr("multiplayer_note"), I18n.tr("reward_note"), Seasons.season_name(), ("المستوى %d" % Seasons.season_level) if I18n.is_arabic() else ("Level %d" % Seasons.season_level)]
     note.add_theme_font_size_override("font_size", 17)
     home_panel.add_child(note)
+
+func _home_season() -> void:
+    _http_get("/season", func(data):
+        Seasons.apply_server_data(data)
+        var lines:Array = []
+        lines.append(("الموسم: " if I18n.is_arabic() else "Season: ") + Seasons.season_name())
+        lines.append(("مستوى الموسم: %d • XP: %d" % [Seasons.season_level, Seasons.season_xp]) if I18n.is_arabic() else ("Season level: %d • XP: %d" % [Seasons.season_level, Seasons.season_xp]))
+        lines.append("")
+        for c in Seasons.get_daily():
+            var label := str(c.get("ar", "")) if I18n.is_arabic() else str(c.get("en", ""))
+            var claimed := " ✓" if bool(c.get("claimed", false)) else ""
+            lines.append("• %s — %d/%d%s" % [label, int(c.get("progress", 0)), int(c.get("target", 0)), claimed])
+        _show_overlay(("الموسم والمهام اليومية" if I18n.is_arabic() else "Season & Daily Missions"), lines)
+    )
 
 func _home_button(text:String, pos:Vector2, size:Vector2, callback:Callable) -> void:
     var b := Button.new()
@@ -184,15 +206,8 @@ func _home_leaderboard() -> void:
         for row in data.get("leaderboard",[]): lines.append("#%s  %s  • %s %s • %s %s" % [str(row.get("rank",0)),str(row.get("username","Player")),I18n.tr("gold"),str(row.get("gold",0)),I18n.tr("wins"),str(row.get("wins",0))])
         _show_overlay(I18n.tr("leaderboard"), lines))
 
-func _home_season() -> void:
-    var lines:Array = []
-    lines.append(("الموسم: " if I18n.is_arabic() else "Season: ") + Seasons.season_name())
-    lines.append(("مستوى الموسم: %d • XP: %d" % [Seasons.season_level(), Seasons.season_xp]) if I18n.is_arabic() else ("Season level: %d • XP: %d" % [Seasons.season_level(), Seasons.season_xp]))
-    lines.append("")
-    for c in Seasons.get_daily():
-        var label := str(c.ar) if I18n.is_arabic() else str(c.en)
-        lines.append("• %s — %d/%d" % [label, Seasons.progress(str(c.id)), int(c.target)])
-    _show_overlay(("الموسم والمهام اليومية" if I18n.is_arabic() else "Season & Daily Missions"), lines)
+func _home_shop_placeholder() -> void:
+    pass
 
 func _home_settings() -> void:
     _show_overlay(I18n.tr("settings"), ["ConquerX 1280×720 • Android landscape", "Arabic / English • saved automatically", "Adaptive quality: %s • %d FPS" % [Performance.quality_name(), Performance.target_fps], "Sound, music and effects can be controlled in-match."])
