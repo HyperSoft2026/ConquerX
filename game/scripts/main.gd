@@ -4,6 +4,7 @@ const SERVER_URL := "https://app-4729a9fe-87fc-4f1b-9248-112725e0db57.cleverapps
 const LOGIN_TIMEOUT_SECONDS := 600.0
 const LOGIN_POLL_SECONDS := 2.0
 const GAME_SCENE := preload("res://game/scenes/game.tscn")
+const SESSION_PATH := "user://conquerx_session.cfg"
 
 @onready var status_value: Label = $StatusPanel/StatusValue
 @onready var continue_button: Button = $ContinueButton
@@ -25,7 +26,55 @@ func _ready() -> void:
     login_button.pressed.connect(_on_discord_login_pressed)
     status_value.text = I18n.text_for("server_online")
     _apply_language()
+    _restore_saved_session()
+
+func _restore_saved_session() -> void:
+    var cfg := ConfigFile.new()
+    if cfg.load(SESSION_PATH) != OK:
+        _check_server()
+        return
+    session_token = str(cfg.get_value("auth", "session_token", ""))
+    if session_token.is_empty():
+        _check_server()
+        return
+    login_button.disabled = true
+    continue_button.disabled = true
+    status_value.text = "جارٍ استعادة الجلسة..." if I18n.is_arabic() else "Restoring saved session..."
+    var request := HTTPRequest.new()
+    add_child(request)
+    request.request_completed.connect(_saved_session_checked.bind(request))
+    request.request(SERVER_URL + "/me", PackedStringArray(["Authorization: Bearer %s" % session_token]))
+
+func _saved_session_checked(result:int, code:int, _headers:PackedStringArray, body:PackedByteArray, request:HTTPRequest) -> void:
+    request.queue_free()
+    if result == HTTPRequest.RESULT_SUCCESS and code == 200:
+        var parsed = JSON.parse_string(body.get_string_from_utf8())
+        if typeof(parsed) == TYPE_DICTIONARY and typeof(parsed.get("account", {})) == TYPE_DICTIONARY:
+            account = parsed.get("account", {})
+            logged_in = true
+            login_button.disabled = true
+            continue_button.disabled = false
+            _show_home()
+            _sync_season()
+            return
+    _clear_saved_session()
+    session_token = ""
+    account = {}
+    logged_in = false
+    login_button.disabled = false
+    continue_button.disabled = false
+    status_value.text = I18n.text_for("server_unavailable") if result != HTTPRequest.RESULT_SUCCESS else I18n.text_for("opening_discord")
     _check_server()
+
+func _save_session() -> void:
+    var cfg := ConfigFile.new()
+    cfg.set_value("auth", "session_token", session_token)
+    cfg.save(SESSION_PATH)
+
+func _clear_saved_session() -> void:
+    var cfg := ConfigFile.new()
+    cfg.set_value("auth", "session_token", "")
+    cfg.save(SESSION_PATH)
 
 func _process(delta: float) -> void:
     if login_session_id.is_empty() or logged_in: return
@@ -93,6 +142,7 @@ func _login_done(result:int, code:int, _headers:PackedStringArray, body:PackedBy
     logged_in = true
     login_session_id = ""
     login_button.disabled = true
+    _save_session()
     _sync_season()
     _show_home()
 
@@ -118,97 +168,122 @@ func _rebuild_home() -> void:
     if home_panel != null: home_panel.queue_free()
     home_buttons.clear()
 
-    # Landscape-first home screen: 1280x720 canvas with clear zones for touch.
     home_panel = Panel.new()
-    home_panel.position = Vector2(28, 118)
-    home_panel.size = Vector2(1224, 570)
-    home_panel.add_theme_stylebox_override("panel", _menu_style(Color(0.025, 0.12, 0.31, 0.92), Color("#37d9ff"), 24, 3))
-    home_panel.modulate.a = 0.0
+    home_panel.position = Vector2(24, 102)
+    home_panel.size = Vector2(1232, 590)
+    home_panel.add_theme_stylebox_override("panel", _menu_style(Color("#071a3a"), Color("#2bd7ff"), 26, 2))
     add_child(home_panel)
-    var intro := home_panel.create_tween()
-    intro.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-    intro.tween_property(home_panel, "modulate:a", 1.0, 0.22)
-    intro.parallel().tween_property(home_panel, "position", Vector2(28, 108), 0.22)
 
-    # Top status strip
     var greeting := Label.new()
-    greeting.position = Vector2(28, 18)
-    greeting.size = Vector2(700, 44)
-    greeting.text = "%s, %s!" % [I18n.text_for("welcome"), str(account.get("username", "Player"))]
+    greeting.position = Vector2(26, 14)
+    greeting.size = Vector2(780, 42)
+    var username := str(account.get("username", "")).strip_edges()
+    if username.is_empty() or username.contains("<") or username.contains("\\"):
+        username = "Player1234"
+    greeting.text = "%s، %s" % [I18n.text_for("welcome"), username] if I18n.is_arabic() else "%s, %s" % [I18n.text_for("welcome"), username]
     greeting.add_theme_font_size_override("font_size", 25)
     greeting.add_theme_color_override("font_color", Color("#ffffff"))
     home_panel.add_child(greeting)
 
-    _stat_chip("🟡  %s  %s" % [I18n.text_for("gold"), _short_number(int(account.get("gold", 0)))], Vector2(28, 70), Vector2(205, 48), Color("#ffca3a"))
-    _stat_chip("💎  %s  %s" % [I18n.text_for("gems"), _short_number(int(account.get("gems", 0)))], Vector2(245, 70), Vector2(205, 48), Color("#ff72e5"))
-    _stat_chip("⭐  %s %s" % [I18n.text_for("level"), str(account.get("level", 1))], Vector2(462, 70), Vector2(175, 48), Color("#7ee7ff"))
+    # Left: compact player card with readable stats and currency.
+    var player_card := Panel.new()
+    player_card.position = Vector2(22, 68)
+    player_card.size = Vector2(250, 370)
+    player_card.add_theme_stylebox_override("panel", _menu_style(Color("#102a55"), Color("#4aa8ff"), 22, 2))
+    home_panel.add_child(player_card)
+    var avatar := Label.new()
+    avatar.position = Vector2(20, 18)
+    avatar.size = Vector2(210, 48)
+    avatar.text = "✦   " + username
+    avatar.add_theme_font_size_override("font_size", 22)
+    avatar.add_theme_color_override("font_color", Color("#ffffff"))
+    player_card.add_child(avatar)
+    var level_label := Label.new()
+    level_label.position = Vector2(20, 82)
+    level_label.size = Vector2(210, 32)
+    level_label.text = "%s  %s" % [I18n.text_for("level"), str(account.get("level", 1))]
+    level_label.add_theme_font_size_override("font_size", 19)
+    level_label.add_theme_color_override("font_color", Color("#9deeff"))
+    player_card.add_child(level_label)
+    var xp_label := Label.new()
+    xp_label.position = Vector2(20, 119)
+    xp_label.size = Vector2(210, 26)
+    xp_label.text = "%s  %s" % [I18n.text_for("xp"), _short_number(int(account.get("xp", 0)))]
+    xp_label.add_theme_font_size_override("font_size", 16)
+    xp_label.add_theme_color_override("font_color", Color("#dbeafe"))
+    player_card.add_child(xp_label)
+    var xp_bar := ProgressBar.new()
+    xp_bar.position = Vector2(20, 151)
+    xp_bar.size = Vector2(210, 14)
+    xp_bar.max_value = 1000
+    xp_bar.value = int(account.get("xp", 0)) % 1000
+    xp_bar.show_percentage = false
+    player_card.add_child(xp_bar)
+    _stat_chip("🟡  %s" % _short_number(int(account.get("gold", 0))), Vector2(12, 190), Vector2(226, 48), Color("#ffca3a"))
+    _stat_chip("💎  %s" % _short_number(int(account.get("gems", 0))), Vector2(12, 250), Vector2(226, 48), Color("#ff72e5"))
+    var profile := _home_button("👤  " + I18n.text_for("profile"), Vector2(12, 310), Vector2(226, 46), Callable(self, "_home_profile"))
+    profile.add_theme_font_size_override("font_size", 17)
 
-    # Large, primary play card
+    # Center: a single primary play card. The mascot stays beside the text, never over the button.
     var play_card := Panel.new()
-    play_card.position = Vector2(28, 142)
-    play_card.size = Vector2(600, 300)
-    play_card.add_theme_stylebox_override("panel", _menu_style(Color("#123b91"), Color("#ffe15b"), 24, 4))
+    play_card.position = Vector2(288, 68)
+    play_card.size = Vector2(540, 370)
+    play_card.add_theme_stylebox_override("panel", _menu_style(Color("#123b91"), Color("#ffe15b"), 24, 3))
     home_panel.add_child(play_card)
-
     var mode_title := Label.new()
-    mode_title.position = Vector2(28, 24)
-    mode_title.size = Vector2(520, 50)
-    mode_title.text = "⚔  CONQUER THE ARENA"
-    mode_title.add_theme_font_size_override("font_size", 29)
+    mode_title.position = Vector2(22, 22)
+    mode_title.size = Vector2(330, 54)
+    mode_title.text = "⚔  " + ("ساحة المعركة" if I18n.is_arabic() else "CONQUER THE ARENA")
+    mode_title.add_theme_font_size_override("font_size", 25)
     mode_title.add_theme_color_override("font_color", Color("#fff7d1"))
     play_card.add_child(mode_title)
-
     var mode_note := Label.new()
-    mode_note.position = Vector2(30, 82)
-    mode_note.size = Vector2(525, 68)
+    mode_note.position = Vector2(22, 86)
+    mode_note.size = Vector2(330, 96)
     mode_note.text = I18n.text_for("multiplayer_note")
     mode_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     mode_note.add_theme_font_size_override("font_size", 17)
     mode_note.add_theme_color_override("font_color", Color("#d8f5ff"))
     play_card.add_child(mode_note)
-
-    var play := _home_button("▶   " + I18n.text_for("play_online"), Vector2(28, 180), Vector2(540, 82), Callable(self, "_play_online"))
-    play.add_theme_font_size_override("font_size", 27)
+    var play := _home_button("▶   " + I18n.text_for("play_online"), Vector2(20, 245), Vector2(320, 78), Callable(self, "_play_online"))
+    play.add_theme_font_size_override("font_size", 24)
     play.add_theme_stylebox_override("normal", _menu_style(Color("#ffe13d"), Color("#fff4a0"), 20, 3))
     play.add_theme_stylebox_override("hover", _menu_style(Color("#fff078"), Color("#ffffff"), 20, 3))
     play.add_theme_color_override("font_color", Color("#12316f"))
     play.add_theme_color_override("font_hover_color", Color("#12316f"))
 
-    # Quick navigation on the right, large enough for touch.
+    # Right: touch-sized navigation grid, mirrored for Arabic.
     var nav_title := Label.new()
-    nav_title.position = Vector2(690, 145)
-    nav_title.size = Vector2(440, 36)
-    nav_title.text = "YOUR WORLD"
-    nav_title.add_theme_font_size_override("font_size", 20)
+    nav_title.position = Vector2(850, 72)
+    nav_title.size = Vector2(340, 38)
+    nav_title.text = "عالمك" if I18n.is_arabic() else "YOUR WORLD"
+    nav_title.add_theme_font_size_override("font_size", 21)
     nav_title.add_theme_color_override("font_color", Color("#9deeff"))
     home_panel.add_child(nav_title)
+    _home_button("🛍  " + I18n.text_for("shop"), Vector2(850, 120), Vector2(165, 66), Callable(self, "_home_shop"))
+    _home_button("👤  " + I18n.text_for("profile"), Vector2(1025, 120), Vector2(165, 66), Callable(self, "_home_profile"))
+    _home_button("🎭  " + I18n.text_for("skins"), Vector2(850, 198), Vector2(165, 66), Callable(self, "_home_skins"))
+    _home_button("🏆  " + I18n.text_for("leaderboard"), Vector2(1025, 198), Vector2(165, 66), Callable(self, "_home_leaderboard"))
+    _home_button("📋  " + ("المهام اليومية" if I18n.is_arabic() else "DAILY MISSIONS"), Vector2(850, 276), Vector2(165, 66), Callable(self, "_home_season"))
+    _home_button("⚙  " + I18n.text_for("settings"), Vector2(1025, 276), Vector2(165, 66), Callable(self, "_home_settings"))
 
-    _home_button("🛍  " + I18n.text_for("shop"), Vector2(690, 190), Vector2(235, 72), Callable(self, "_home_shop"))
-    _home_button("👤  " + I18n.text_for("profile"), Vector2(940, 190), Vector2(235, 72), Callable(self, "_home_profile"))
-    _home_button("🎭  " + I18n.text_for("skins"), Vector2(690, 278), Vector2(235, 72), Callable(self, "_home_skins"))
-    _home_button("🏆  " + I18n.text_for("leaderboard"), Vector2(940, 278), Vector2(235, 72), Callable(self, "_home_leaderboard"))
-    _home_button("📋  " + ("المهام اليومية" if I18n.is_arabic() else "DAILY MISSIONS"), Vector2(690, 366), Vector2(235, 72), Callable(self, "_home_season"))
-    _home_button("⚙  " + I18n.text_for("settings"), Vector2(940, 366), Vector2(235, 72), Callable(self, "_home_settings"))
-
-    # Season and player progress strip
     var progress := Panel.new()
-    progress.position = Vector2(28, 462)
-    progress.size = Vector2(1147, 72)
-    progress.add_theme_stylebox_override("panel", _menu_style(Color(0.02, 0.07, 0.2, 0.78), Color("#287cc5"), 16, 2))
+    progress.position = Vector2(22, 455)
+    progress.size = Vector2(1188, 105)
+    progress.add_theme_stylebox_override("panel", _menu_style(Color("#07152d"), Color("#287cc5"), 18, 2))
     home_panel.add_child(progress)
     var progress_label := Label.new()
-    progress_label.position = Vector2(20, 8)
-    progress_label.size = Vector2(1100, 56)
+    progress_label.position = Vector2(18, 10)
+    progress_label.size = Vector2(1150, 78)
     progress_label.text = "🌟  %s     •     %s     •     %s" % [Seasons.season_name(), ("مستوى الموسم %d" % Seasons.season_level) if I18n.is_arabic() else ("SEASON LEVEL %d" % Seasons.season_level), I18n.text_for("reward_note")]
     progress_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     progress_label.add_theme_font_size_override("font_size", 16)
     progress_label.add_theme_color_override("font_color", Color("#e8faff"))
     progress.add_child(progress_label)
 
-    # Keep the original mascot visible above the translucent home surface.
     if has_node("Mascot"):
-        $Mascot.position = Vector2(650, 385)
-        $Mascot.scale = Vector2(0.68, 0.68)
+        $Mascot.position = Vector2(715, 330)
+        $Mascot.scale = Vector2(0.34, 0.34)
         $Mascot.move_to_front()
 
 func _menu_style(fill:Color, border_color:Color, radius:int, border_width:int) -> StyleBoxFlat:
