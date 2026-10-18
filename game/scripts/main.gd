@@ -368,12 +368,96 @@ func _home_profile() -> void:
 
 func _home_skins() -> void:
     _http_get("/shop", func(data):
-        var lines:Array=["%s: %s / 50" % [I18n.text_for("owned"), str(account.get("unlocked_skins",[1]).size())]]
-        for s in data.get("skins",[]): lines.append("Skin %02d • %s" % [int(s.get("id",0)), str(s.get("rarity","Common"))])
-        _show_overlay(I18n.text_for("skins"), lines))
+        _show_shop_panel(data, true)
+    )
 
 func _home_shop() -> void:
-    _show_overlay(I18n.text_for("shop"), ["%s %s" % [I18n.text_for("gold"),str(account.get("gold",0))], "%s %s" % [I18n.text_for("gems"),str(account.get("gems",0))], I18n.text_for("reward_note")])
+    _http_get("/shop", func(data):
+        _show_shop_panel(data, false)
+    )
+
+func _show_shop_panel(data:Dictionary, skins_only:bool) -> void:
+    if home_overlay != null: home_overlay.queue_free()
+    home_overlay = Panel.new()
+    home_overlay.position = Vector2(180, 82)
+    home_overlay.size = Vector2(920, 570)
+    home_overlay.add_theme_stylebox_override("panel", _menu_style(Color("#0b1b38"), Color("#37d9ff"), 24, 2))
+    add_child(home_overlay)
+    var title := Label.new()
+    title.position = Vector2(24, 16)
+    title.size = Vector2(820, 42)
+    title.text = I18n.text_for("skins") if skins_only else I18n.text_for("shop")
+    title.add_theme_font_size_override("font_size", 28)
+    home_overlay.add_child(title)
+    var balance := Label.new()
+    balance.position = Vector2(24, 58)
+    balance.size = Vector2(850, 32)
+    balance.text = "%s: %s     💎 %s" % [I18n.text_for("gold"), str(account.get("gold", 0)), str(account.get("gems", 0))]
+    balance.add_theme_font_size_override("font_size", 18)
+    home_overlay.add_child(balance)
+    var scroll := ScrollContainer.new()
+    scroll.position = Vector2(20, 98)
+    scroll.size = Vector2(875, 385)
+    home_overlay.add_child(scroll)
+    var list := VBoxContainer.new()
+    list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    list.add_theme_constant_override("separation", 8)
+    scroll.add_child(list)
+    if not skins_only:
+        for item in data.get("items", []):
+            var item_button := Button.new()
+            item_button.custom_minimum_size = Vector2(835, 56)
+            item_button.text = "%s   •   %s %s   •   💎 %s" % [str(item.get("name", "Item")), I18n.text_for("gold"), str(item.get("gold_cost", 0)), str(item.get("gems_cost", 0))]
+            item_button.pressed.connect(_buy_shop_item.bind(str(item.get("id", ""))))
+            list.add_child(item_button)
+    var unlocked_value = account.get("unlocked_skins", [1])
+    var unlocked:Array = unlocked_value if typeof(unlocked_value) == TYPE_ARRAY else [1]
+    for skin in data.get("skins", []):
+        var id := int(skin.get("id", 0))
+        var owned := id in unlocked
+        var equipped := id == int(account.get("selected_skin", 1))
+        var skin_button := Button.new()
+        skin_button.custom_minimum_size = Vector2(835, 56)
+        if owned:
+            skin_button.text = ("✓  " if equipped else "◉  ") + ("المظهر %02d • مجهز" % id if equipped and I18n.is_arabic() else ("المظهر %02d • اضغط للتجهيز" % id if I18n.is_arabic() else ("Skin %02d • Equipped" % id if equipped else "Skin %02d • Equip" % id)))
+            skin_button.pressed.connect(_equip_home_skin.bind(id))
+        else:
+            skin_button.text = ("شراء المظهر %02d" % id if I18n.is_arabic() else "Buy Skin %02d" % id) + "   •   G %s / 💎 %s" % [str(skin.get("gold_cost", 0)), str(skin.get("gems_cost", 0))]
+            skin_button.pressed.connect(_buy_shop_skin.bind(id))
+        list.add_child(skin_button)
+    var close := Button.new()
+    close.text = I18n.text_for("close")
+    close.position = Vector2(24, 500)
+    close.size = Vector2(870, 48)
+    close.pressed.connect(_close_overlay)
+    home_overlay.add_child(close)
+    I18n.direction(home_overlay)
+
+func _buy_shop_item(id:String) -> void:
+    _http_post("/shop/buy", {"type":"currency", "id":id}, func(_data):
+        _refresh_home_account()
+        _home_shop()
+    )
+
+func _buy_shop_skin(id:int) -> void:
+    _http_post("/shop/buy", {"type":"skin", "id":id}, func(data):
+        account["unlocked_skins"] = data.get("unlocked_skins", account.get("unlocked_skins", [1]))
+        _refresh_home_account()
+        _home_shop()
+    )
+
+func _equip_home_skin(id:int) -> void:
+    _http_post("/profile/skin", {"skin_id":id}, func(_data):
+        account["selected_skin"] = id
+        _refresh_home_account()
+        _home_skins()
+    )
+
+func _refresh_home_account() -> void:
+    _http_get("/profile", func(data):
+        account = data.get("profile", account)
+        _rebuild_home()
+    )
 
 func _home_leaderboard() -> void:
     _http_get("/leaderboard?sort=gold&limit=20", func(data):
@@ -385,7 +469,59 @@ func _home_shop_placeholder() -> void:
     pass
 
 func _home_settings() -> void:
-    _show_overlay(I18n.text_for("settings"), ["ConquerX 1280×720 • Android landscape", "Arabic / English • saved automatically", "Adaptive quality: %s • %d FPS" % [GamePerformance.quality_name(), GamePerformance.target_fps], "Sound, music and effects can be controlled in-match."])
+    if home_overlay != null: home_overlay.queue_free()
+    home_overlay = Panel.new()
+    home_overlay.position = Vector2(330, 130)
+    home_overlay.size = Vector2(620, 440)
+    home_overlay.add_theme_stylebox_override("panel", _menu_style(Color("#0b1b38"), Color("#37d9ff"), 24, 2))
+    add_child(home_overlay)
+    var title := Label.new()
+    title.position = Vector2(26, 20)
+    title.size = Vector2(560, 46)
+    title.text = I18n.text_for("settings")
+    title.add_theme_font_size_override("font_size", 28)
+    home_overlay.add_child(title)
+    var language_label := Label.new()
+    language_label.position = Vector2(28, 88)
+    language_label.size = Vector2(560, 36)
+    language_label.text = I18n.text_for("language")
+    language_label.add_theme_font_size_override("font_size", 20)
+    home_overlay.add_child(language_label)
+    var arabic := Button.new()
+    arabic.text = "العربية"
+    arabic.position = Vector2(28, 138)
+    arabic.size = Vector2(265, 62)
+    arabic.pressed.connect(func():
+        I18n.set_language("ar")
+        _apply_language()
+        _close_overlay()
+        _rebuild_home()
+    )
+    home_overlay.add_child(arabic)
+    var english := Button.new()
+    english.text = "English"
+    english.position = Vector2(310, 138)
+    english.size = Vector2(265, 62)
+    english.pressed.connect(func():
+        I18n.set_language("en")
+        _apply_language()
+        _close_overlay()
+        _rebuild_home()
+    )
+    home_overlay.add_child(english)
+    var quality := Label.new()
+    quality.position = Vector2(28, 225)
+    quality.size = Vector2(560, 58)
+    quality.text = ("جودة الرسوم: %s • %d إطار/ث" % [GamePerformance.quality_name(), GamePerformance.target_fps]) if I18n.is_arabic() else ("Graphics quality: %s • %d FPS" % [GamePerformance.quality_name(), GamePerformance.target_fps])
+    quality.add_theme_font_size_override("font_size", 17)
+    home_overlay.add_child(quality)
+    var close := Button.new()
+    close.text = I18n.text_for("close")
+    close.position = Vector2(28, 340)
+    close.size = Vector2(547, 58)
+    close.pressed.connect(_close_overlay)
+    home_overlay.add_child(close)
+    I18n.direction(home_overlay)
 
 func _show_overlay(title:String, lines:Array) -> void:
     if home_overlay != null: home_overlay.queue_free()
@@ -405,6 +541,20 @@ func _close_overlay() -> void:
     var panel := home_overlay
     home_overlay = null
     var tween := create_tween(); tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN); tween.tween_property(panel,"modulate:a",0.0,0.12); tween.tween_callback(panel.queue_free)
+
+func _http_post(path:String, payload:Dictionary, callback:Callable) -> void:
+    var request := HTTPRequest.new()
+    add_child(request)
+    request.request_completed.connect(func(result, code, _headers, body):
+        request.queue_free()
+        if result == HTTPRequest.RESULT_SUCCESS and code >= 200 and code < 300:
+            var parsed = JSON.parse_string(body.get_string_from_utf8())
+            if typeof(parsed) == TYPE_DICTIONARY:
+                callback.call(parsed)
+        else:
+            status_value.text = I18n.text_for("request_failed")
+    )
+    request.request(SERVER_URL + path, PackedStringArray(["Content-Type: application/json", "Authorization: Bearer %s" % session_token]), HTTPClient.METHOD_POST, JSON.stringify(payload))
 
 func _http_get(path:String, callback:Callable) -> void:
     var request:=HTTPRequest.new(); add_child(request)
